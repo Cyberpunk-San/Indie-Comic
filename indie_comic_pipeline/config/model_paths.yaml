@@ -1,0 +1,31 @@
+# Model Paths for ComfyUI and SDXL
+
+comfyui:
+  base_path: "ComfyUI"
+  models:
+    checkpoints: "ComfyUI/models/checkpoints"
+    controlnet: "ComfyUI/models/controlnet"
+    ipadapter: "ComfyUI/models/ipadapter"
+    loras: "ComfyUI/models/loras"
+    clip_vision: "ComfyUI/models/clip_vision"
+
+sdxl:
+  cache_dir: "~/.cache/huggingface"
+  local_files_only: false
+
+# Required Models
+required_models:
+  - name: "sd_xl_base_1.0.safetensors"
+    type: "checkpoint"
+    url: "https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0"
+    size: "7GB"
+  
+  - name: "AnylineSDXL.safetensors"
+    type: "controlnet"
+    url: "https://huggingface.co/TheMistoAI/MistoLine"
+    size: "1.5GB"
+  
+  - name: "ip-adapter-faceid-plusv2_sdxl.bin"
+    type: "ipadapter"
+    url: "https://huggingface.co/h94/IP-Adapter-FaceID"
+    size: "1.2GB"

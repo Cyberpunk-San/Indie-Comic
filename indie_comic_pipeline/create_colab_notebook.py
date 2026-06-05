@@ -1,0 +1,445 @@
+"""
+CREATE GOOGLE COLAB NOTEBOOK
+Run this script to generate 'indie_comic_pipeline.ipynb'
+"""
+
+import json
+
+notebook = {
+
+ "cells": [
+
+  {
+
+   "cell_type": "markdown",
+
+   "metadata": {},
+
+   "source": [
+
+    "# Indie Comic Pipeline - Google Colab Edition\n",
+
+    "This notebook runs the Indie Comic Pipeline with free GPU acceleration for SDXL (5-10 seconds per image instead of 2 hours on CPU).\n",
+
+    "\n",
+
+    "### How to run:\n",
+
+    "1. In the Colab menu, go to **Runtime > Change runtime type** and select **T4 GPU** (or any available GPU).\n",
+
+    "2. Upload your `indie_comic_pipeline` folder to this session (or mount your Google Drive).\n",
+
+    "3. Run the cells below in order."
+
+   ]
+
+  },
+
+  {
+
+   "cell_type": "markdown",
+
+   "metadata": {},
+
+   "source": [
+
+    "### Step 1: Install Dependencies\n",
+
+    "This installs the required libraries including PyTorch with GPU compatibility, diffusers, accelerate, and langchain."
+
+   ]
+
+  },
+
+  {
+
+   "cell_type": "code",
+
+   "execution_count": None,
+
+   "metadata": {},
+
+   "outputs": [],
+
+   "source": [
+
+    "!pip install diffusers transformers accelerate safetensors langchain-ollama langchain-core pyyaml opencv-python pillow"
+
+   ]
+
+  },
+
+  {
+
+   "cell_type": "markdown",
+
+   "metadata": {},
+
+   "source": [
+
+    "### Step 2: Install and Start Ollama\n",
+
+    "This downloads the Ollama binary, launches the background daemon inside Colab, and pulls the `llama3.2` model."
+
+   ]
+
+  },
+
+  {
+
+   "cell_type": "code",
+
+   "execution_count": None,
+
+   "metadata": {},
+
+   "outputs": [],
+
+   "source": [
+
+    "# Install Ollama\n",
+
+    "!curl -fsSL https://ollama.com/install.sh | sh\n",
+
+    "\n",
+
+    "# Start Ollama serve in the background\n",
+
+    "import subprocess\n",
+
+    "import time\n",
+
+    "subprocess.Popen([\"ollama\", \"serve\"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)\n",
+
+    "time.sleep(5) # Give it 5 seconds to wake up\n",
+
+    "\n",
+
+    "# Pull Llama 3.2 model\n",
+
+    "!ollama pull llama3.2"
+
+   ]
+
+  },
+
+  {
+
+   "cell_type": "markdown",
+
+   "metadata": {},
+
+   "source": [
+
+    "### Step 3: Configure Settings for Colab GPU\n",
+
+    "We will rewrite/update `config/settings.yaml` to use `cuda` (GPU device) and ensure standard SDXL resolution."
+
+   ]
+
+  },
+
+  {
+
+   "cell_type": "code",
+
+   "execution_count": None,
+
+   "metadata": {},
+
+   "outputs": [],
+
+   "source": [
+
+    "import yaml\n",
+
+    "\n",
+
+    "with open('config/settings.yaml', 'r') as f:\n",
+
+    "    settings = yaml.safe_load(f)\n",
+
+    "\n",
+
+    "# Configure settings for fast GPU SDXL\n",
+
+    "settings['models']['sdxl']['device'] = 'cuda'\n",
+
+    "settings['models']['sdxl']['name'] = 'stabilityai/stable-diffusion-xl-base-1.0'\n",
+
+    "settings['generation']['default_size']['width'] = 1024\n",
+
+    "settings['generation']['default_size']['height'] = 1024\n",
+
+    "settings['generation']['inference_steps'] = 30\n",
+
+    "\n",
+
+    "with open('config/settings.yaml', 'w') as f:\n",
+
+    "    yaml.safe_dump(settings, f)"
+
+   ]
+
+  },
+
+  {
+
+   "cell_type": "markdown",
+
+   "metadata": {},
+
+   "source": [
+
+    "### Step 4: Run LangChain Extraction Pipeline\n",
+
+    "Change the arguments below to customize the character and story setting."
+
+   ]
+
+  },
+
+  {
+
+   "cell_type": "code",
+
+   "execution_count": None,
+
+   "metadata": {},
+
+   "outputs": [],
+
+   "source": [
+
+    "# Customize character and based story setting here:\n",
+
+    "CHARACTER = \"Spiderman\"\n",
+
+    "STORY_SETTING = \"Cyberpunk\"\n",
+
+    "\n",
+
+    "!python langchain_code/character_extractor.py \"{CHARACTER}\"\n",
+
+    "!python langchain_code/story_extractor.py \"{STORY_SETTING}\"\n",
+
+    "!python langchain_code/fusion_engine.py"
+
+   ]
+
+  },
+
+  {
+
+   "cell_type": "markdown",
+
+   "metadata": {},
+
+   "source": [
+
+    "### Step 5: Run SDXL Image Generation Pipeline\n",
+
+    "This loads SDXL on GPU, renders the character reference and the 4 story components, and saves them."
+
+   ]
+
+  },
+
+  {
+
+   "cell_type": "code",
+
+   "execution_count": None,
+
+   "metadata": {},
+
+   "outputs": [],
+
+   "source": [
+
+    "%cd sdxl_code\n",
+
+    "!python run_sdxl_pipeline.py\n",
+
+    "%cd .."
+
+   ]
+
+  },
+
+  {
+
+   "cell_type": "markdown",
+
+   "metadata": {},
+
+   "source": [
+
+    "### Step 5: Read the 10-Page Multiverse Crossover Script\n",
+
+    "This displays the full 10-page crossover storyboard script, including plot progression, character personality adaptation, panel descriptions, and dialogue/captions."
+
+   ]
+
+  },
+
+  {
+
+   "cell_type": "code",
+
+   "execution_count": None,
+
+   "metadata": {},
+
+   "outputs": [],
+
+   "source": [
+
+    "import json\n",
+
+    "\n",
+
+    "with open('outputs/fusion/fusion_complete.json', 'r', encoding='utf-8') as f:\n",
+
+    "    data = json.load(f)\n",
+
+    "\n",
+
+    "fusion = data.get('fusion', {})\n",
+
+    "personality = data.get('personality', {})\n",
+
+    "setting = data.get('setting', {})\n",
+
+    "\n",
+
+    "print(\"=\" * 80)\n",
+
+    "print(f\"MULTIVERSE CROSSOVER EVENT: {personality.get('character_name')} IN {setting.get('story_name')}\")\n",
+
+    "print(f\"Theme of the World: {setting.get('theme', '')}\")\n",
+
+    "print(f\"Dialogue Style & Tone: {setting.get('dialogue_style_and_tone', '')}\")\n",
+
+    "print(f\"Cinematographic Visual Style: {setting.get('cinematographic_visual_style', '')}\")\n",
+
+    "print(f\"Adaptation Style: {fusion.get('character_visual_looks', '')}\")\n",
+
+    "print(f\"Adaptation Summary: {fusion.get('multiverse_adaptation_summary', '')}\")\n",
+
+    "print(\"=\" * 80)\n",
+
+    "\n",
+
+    "pages = fusion.get('storyboard_10_pages', [])\n",
+
+    "for p in pages:\n",
+
+    "    print(f\"\\n=== PAGE {p.get('page_number')}: {p.get('location')} ===\")\n",
+
+    "    print(f\"Narrative Progression: {p.get('narrative_progression')}\")\n",
+
+    "    print(f\"Personality/Mood Shift: {p.get('personality_state')}\")\n",
+
+    "    if p.get('side_characters_present'):\n",
+
+    "        print(f\"Side Characters: {', '.join(p.get('side_characters_present'))}\")\n",
+
+    "    print(\"Panels Breakdown:\")\n",
+
+    "    for pb in p.get('panels_breakdown', []):\n",
+
+    "        print(f\"  - {pb}\")\n",
+
+    "    print(\"Dialogue & Captions:\")\n",
+
+    "    for dc in p.get('dialogue_and_captions', []):\n",
+
+    "        print(f\"  - {dc}\")\n",
+
+    "    print(\"-\" * 80)"
+
+   ]
+
+  },
+
+  {
+
+   "cell_type": "markdown",
+
+   "metadata": {},
+
+   "source": [
+
+    "### Step 6: View the Generated Assets (Visual Components)\n",
+
+    "Displays the generated character reference profile and the compiled dynamic asset sheet showing the persistent components (ranked by vector space persistence scoring)."
+
+   ]
+
+  },
+
+  {
+
+   "cell_type": "code",
+
+   "execution_count": None,
+
+   "metadata": {},
+
+   "outputs": [],
+
+   "source": [
+
+    "from IPython.display import Image, display\n",
+
+    "\n",
+
+    "print(\"=== Character Reference Profile ===\")\n",
+
+    "display(Image(\"outputs/characters/character_reference.png\"))\n",
+
+    "\n",
+
+    "print(\"\\n=== Persistent Visual Assets Sheet (Dynamic Grid) ===\")\n",
+
+    "display(Image(\"outputs/comics/component_sheet_grid_2x2.png\"))"
+
+   ]
+
+  }
+
+ ],
+
+ "metadata": {
+
+  "kernelspec": {
+
+   "display_name": "Python 3",
+
+   "language": "python",
+
+   "name": "python3"
+
+  },
+
+  "language_info": {
+
+   "name": "python"
+
+  }
+
+ },
+
+ "nbformat": 4,
+
+ "nbformat_minor": 2
+
+}
+
+with open("indie_comic_pipeline.ipynb", "w", encoding="utf-8") as f:
+
+    json.dump(notebook, f, indent=2)
+
+print("Google Colab notebook 'indie_comic_pipeline.ipynb' created successfully!")
+

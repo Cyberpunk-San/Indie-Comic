@@ -1,0 +1,57 @@
+# Main Pipeline Settings
+pipeline:
+  name: "Indie Comic Generator"
+  version: "1.0.0"
+
+# Model Settings
+models:
+  sdxl:
+    name: "stabilityai/stable-diffusion-xl-base-1.0"
+    variant: "fp16"
+    device: "cuda"
+    memory_optimization: true
+  
+  controlnet:
+    lineart: "AnylineSDXL"
+    canny: "canny"
+  
+  ipadapter:
+    model: "ip-adapter-faceid-plusv2_sdxl"
+    weight: 0.8
+
+# Generation Settings
+generation:
+  default_size:
+    width: 1024
+    height: 1024
+  inference_steps: 40
+  guidance_scale: 7.5
+  seed: 42
+
+# Output Settings
+outputs:
+  character_dir: "outputs/characters"
+  comics_dir: "outputs/comics"
+  fusion_dir: "outputs/fusion"
+
+# Style Settings
+style:
+  name: "Clean Indie Comic"
+  positive_terms:
+    - "clean minimalist line art"
+    - "flat color palette"
+    - "crisp continuous outlines"
+    - "cel-shaded with no gradients"
+  negative_terms:
+    - "photorealistic"
+    - "3D render"
+    - "shading"
+    - "gradients"
+    - "blurry"
+    - "messy lines"
+
+# LangChain Settings
+langchain:
+  model: "llama3.2"
+  temperature: 0.3
+  ollama_url: "http://localhost:11434"
