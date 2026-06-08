@@ -114,7 +114,7 @@ Module: [consistency_checker.py](file:///c:/Users/Dell/Downloads/drid/indie_comi
      $$Density = \frac{\sum(\text{Edges} > 0)}{\text{Total Pixels}}$$
    * **Utility:** Verifies that the drawing outline and stroke density match the reference style.
 4. **Art Style Gram Matrix Similarity:**
-   * **Formula/Code:** Resizes image to $256 \times 256$, extracts BGR color channels along with Sobel horizontal and vertical gradients, reshapes to a 5-channel feature matrix $F$, and computes the Gram Matrix representing style textures:
+   * **Formula/Code:** Resize\= image to $256 \times 256$, extracts BGR color channels along with Sobel horizontal and vertical gradients, reshapes to a 5-channel feature matrix $F$, and computes the Gram Matrix representing style textures:
      $$G = F^T F / (H \times W)$$
    * **Utility:** Models the spatial texture and color patterns, reflecting drawing style consistency.
 5. **CLIP Image Cosine Similarity (Semantic):**

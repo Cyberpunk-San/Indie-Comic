@@ -178,6 +178,7 @@ if os.path.exists(ref_path) and component_paths:
     print("\nRunning character consistency checks...")
     try:
         checker = get_consistency_checker()
+        checker.set_reference(ref_path)
         if len(component_paths) > 0:
             main_char_path = component_paths[0]
             res = checker.check_consistency(main_char_path)

@@ -127,7 +127,7 @@ guidance = gen_settings.get("guidance_scale", 7.5)
 seed = gen_settings.get("seed", 42)
 
 for i, panel in enumerate(panels):
-    p_num = panel.get("panel_number")
+    p_num = panel.get("panel_number") or (i + 1)
     print(f"\n--- Panel {p_num} ---")
     print(f"  Visual Prompt: {panel.get('augmented_prompt')[:100]}...")
     
@@ -178,6 +178,7 @@ if os.path.exists(ref_path) and generated_paths:
     print("\nRunning character consistency checks across panels...")
     try:
         checker = get_consistency_checker()
+        checker.set_reference(ref_path)
         for idx, panel_path in enumerate(generated_paths):
             res = checker.check_consistency(panel_path)
             basename = os.path.basename(panel_path)

@@ -255,17 +255,7 @@ try:
 
                                                                                         
 
-    try:
 
-        image.show()
-
-        print("Image opened in default viewer")
-
-    except:
-
-        pass
-
-        
 
 except Exception as e:
 

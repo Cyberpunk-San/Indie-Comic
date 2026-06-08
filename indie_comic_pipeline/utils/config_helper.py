@@ -54,7 +54,9 @@ def get_output_path(*path_parts):
 
         
 
-    os.makedirs(os.path.dirname(full_path), exist_ok=True)
+    parent_dir = os.path.dirname(full_path)
+    if parent_dir:
+        os.makedirs(parent_dir, exist_ok=True)
 
     return full_path
 

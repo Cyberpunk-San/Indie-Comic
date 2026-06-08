@@ -11,6 +11,8 @@ import sys
 
 import os
 
+import numpy as np
+
 if sys.stdout.encoding != 'utf-8':
 
     try:
@@ -565,8 +567,6 @@ fusion_result = fuse_character_and_story(personality, setting)
 candidates_list = fusion_result.get("candidate_visual_elements", [])
 
 pages_list = fusion_result.get("storyboard_10_pages", [])
-
-import numpy as np
 
 persistent_components = run_vector_persistence_analysis(
 

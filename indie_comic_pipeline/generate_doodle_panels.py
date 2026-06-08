@@ -196,9 +196,16 @@ for idx, p in enumerate(story_data["panels"]):
 if generated_paths:
     print("\nCompiling doodles into grid sheet layout...")
     grid_path = get_output_path(comics_dir, "doodle_story_layout_grid.png")
-    # 4 rows, 2 columns grid
-    create_comic_grid(generated_paths, grid_path, grid_size=(4, 2), cell_size=(512, 512))
-    print(f"✅ Success! Compiled grid layout saved to: {grid_path}")
+    # Compute grid size dynamically based on actual number of panels generated
+    import math
+    n = len(generated_paths)
+    cols = min(n, 4)
+    rows = math.ceil(n / cols)
+    grid_size = (rows, cols)
+    cell_w = min(width, 512)
+    cell_h = min(height, 512)
+    create_comic_grid(generated_paths, grid_path, grid_size=grid_size, cell_size=(cell_w, cell_h))
+    print(f"✅ Success! Compiled grid layout ({rows}x{cols}) saved to: {grid_path}")
     
     # Evaluate sequential consistency
     print("\nEvaluating panel-to-panel sequential consistency...")

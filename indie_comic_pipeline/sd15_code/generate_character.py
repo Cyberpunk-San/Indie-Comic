@@ -66,10 +66,15 @@ try:
         use_safetensors=True
     )
     
-    # Load LoRA weights
+    # Load LoRA weights (note: SDXL LoRAs are not directly compatible with SD 1.5)
     lora_name = lora_settings.get("name", "artificialguybr/LineAniRedmond-LinearMangaSDXL-V2")
     print(f"Loading LoRA weights: {lora_name}...")
-    pipe.load_lora_weights(lora_name)
+    try:
+        pipe.load_lora_weights(lora_name)
+        print("LoRA weights loaded successfully.")
+    except Exception as e:
+        print(f"Warning: Could not load LoRA weights into SD 1.5 (SDXL LoRA mismatch): {e}")
+        print("Proceeding without LoRA weights...")
     
     pipe.scheduler = DPMSolverMultistepScheduler.from_config(pipe.scheduler.config, use_karras_sigmas=True)
     pipe = pipe.to(device)
