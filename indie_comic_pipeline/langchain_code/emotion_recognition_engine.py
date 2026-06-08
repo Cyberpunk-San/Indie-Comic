@@ -124,6 +124,11 @@ settings = load_settings()
 fusion_dir = settings.get("outputs", {}).get("fusion_dir", "outputs/fusion")
 langchain_settings = settings.get("langchain", {})
 
+import argparse
+parser = argparse.ArgumentParser(description="Run dialogue emotion recognition engine page-by-page.")
+parser.add_argument("--page", type=int, default=0, help="The page number to process (1-10). If 0, processes all pages.")
+args = parser.parse_args()
+
 # Load completed storyboard fusion
 fusion_path = get_output_path(fusion_dir, "fusion_complete.json")
 if not os.path.exists(fusion_path):
@@ -139,7 +144,18 @@ fusion = fusion_data['fusion']
 pages = fusion.get("storyboard_10_pages", [])
 char_looks = fusion.get("character_visual_looks", "")
 
-print(f"\nProcessing {len(pages)} pages of storyboard...")
+# Filter target pages
+if args.page == 0:
+    target_pages = pages
+    print(f"\nProcessing all {len(pages)} pages of storyboard...")
+else:
+    target_page = next((p for p in pages if p.get("page_number") == args.page), None)
+    if not target_page:
+        print(f"Error: Page {args.page} not found in fusion_complete.json")
+        sys.exit(1)
+    target_pages = [target_page]
+    print(f"\nProcessing Page {args.page} of storyboard...")
+
 print(f"Character adapted looks: {char_looks[:100]}...")
 
 def ensure_ollama_running(ollama_url):
@@ -246,9 +262,20 @@ prompt = ChatPromptTemplate.from_messages([
 
 chain = prompt | llm | StrOutputParser()
 
+# Load existing annotated pages if they exist
+emotions_output_path = get_output_path(fusion_dir, "storyboard_with_emotions.json")
 annotated_pages = []
+if args.page > 0 and os.path.exists(emotions_output_path):
+    try:
+        with open(emotions_output_path, "r", encoding="utf-8") as f:
+            existing_em = json.load(f)
+            if existing_em and "storyboard_with_emotions" in existing_em:
+                # Keep all pages except the one we are currently re-generating
+                annotated_pages = [p for p in existing_em["storyboard_with_emotions"] if p.get("page_number") != args.page]
+    except Exception as e:
+        print(f"Warning: Failed to load existing emotions file: {e}")
 
-for page in pages:
+for page in target_pages:
     page_num = page.get("page_number")
     print(f"\nAnalyzing Page {page_num}...")
     
@@ -298,7 +325,7 @@ for page in pages:
                     }
                 },
                 "core_action": panel_text,
-                "background_env": setting['location']
+                "background_env": setting.get('environment_description', 'city streets')
             }
             previous_emotions_tracker.append(f"Panel {idx+1}: {personality['character_name']}: neutral (medium)")
             
@@ -325,12 +352,27 @@ for page in pages:
         if expr:
             char_prompt = f"{char_prompt}, {expr}"
             
-        # Environment background
-        env = panel_emotions.get("background_env", setting['location'])
+        # Environment background and scene details
+        env = panel_emotions.get("background_env", setting.get('environment_description', 'city streets'))
         action = panel_emotions.get("core_action", "")
         
+        # Read scene_settlement and character_expressions from the storyboard page
+        scene_settlement = page.get("scene_settlement", "")
+        char_expressions = page.get("character_expressions", "")
+        
+        # Build prompt sections: environment and scene settlement details
+        env_details = f"{env}, {scene_settlement}" if scene_settlement else env
+        
+        # Build prompt sections: character description and expressions
+        char_prompt_parts = [char_prompt]
+        if char_expressions:
+            char_prompt_parts.append(char_expressions)
+        char_prompt_combined = ", ".join(char_prompt_parts)
+        
         # Construct final SDXL prompt
-        augmented_prompt = f"indie comic style illustration, {style_desc}, {action}, {char_prompt}, in {env}, {setting['lighting']}, {setting['weather']}"
+        lighting = setting.get('lighting', 'dramatic noir lighting')
+        weather = setting.get('weather', 'foggy overcast')
+        augmented_prompt = f"indie comic style illustration, {style_desc}, {action}, {char_prompt_combined}, in {env_details}, {lighting}, {weather}"
         # Keep under standard SDXL character limit
         augmented_prompt = ", ".join([p.strip() for p in augmented_prompt.split(",") if p.strip()])
         
@@ -343,6 +385,9 @@ for page in pages:
     page_copy = page.copy()
     page_copy["panels_detail"] = annotated_panels
     annotated_pages.append(page_copy)
+
+# Sort pages before saving
+annotated_pages.sort(key=lambda x: x.get("page_number", 1))
 
 # Save annotated storyboard
 output_data = {

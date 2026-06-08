@@ -99,101 +99,110 @@ print("Llama 3.2 is available.")
                                                             
 
 print("\n" + "=" * 70)
-print("STEP 1: Running LangChain Pipeline")
+print("STEP 1: Running Initial Parameters Extraction")
 print("=" * 70)
 
 os.chdir("langchain_code")
-result = subprocess.run([sys.executable, "run_full_pipeline.py"])
+print("🎭 Step 1A: Running Character Personality Extractor...")
+result = subprocess.run([sys.executable, "character_extractor.py"])
 if result.returncode != 0:
-    print("Error: LangChain pipeline step failed.")
+    print("Error: Character extraction failed.")
     sys.exit(1)
 
-print("\n" + "=" * 70)
-print("STEP 1.5: Running Emotion Recognition (ERC) Engine")
-print("=" * 70)
-result = subprocess.run([sys.executable, "emotion_recognition_engine.py"])
+print("\n🌍 Step 1B: Running Story Setting Extractor...")
+result = subprocess.run([sys.executable, "story_extractor.py"])
 if result.returncode != 0:
-    print("Error: Emotion recognition step failed.")
+    print("Error: Story extraction failed.")
     sys.exit(1)
-
-print("\n" + "=" * 70)
-print("STEP 2: Verifying GPU/CUDA environments for SDXL")
-print("=" * 70)
 os.chdir("..")
+
+print("\n" + "=" * 70)
+print("STEP 2: Verifying GPU/CUDA environments")
+print("=" * 70)
 
 import torch
 if not torch.cuda.is_available():
-    print("Warning: CUDA acceleration is not active. SDXL running on CPU will be extremely slow.")
+    print("Warning: CUDA acceleration is not active. Image generation will be extremely slow.")
     response = input("Continue anyway? (y/n): ")
     if response.lower() != 'y':
         print("Exiting...")
         sys.exit(0)
 
 print("\n" + "=" * 70)
-print("STEP 3: Executing Image Generation Pipeline")
+print("STEP 3: Image Generation Pipeline Configuration")
 print("=" * 70)
 
-print("Choose generation mode:")
-print("  1. Standard Component Assets (Generate character reference and core story components)")
-print("  2. Emotion-Aware Comic Panels (Generate layout and panels for a specific storyboard page)")
-mode_choice = input("Enter choice [1 or 2, default is 1]: ").strip()
-
-page_num = 1
-if mode_choice == '2':
-    page_choice = input("Enter storyboard page number to generate (1-10, default is 1): ").strip()
-    try:
-        page_num = int(page_choice) if page_choice else 1
-        if not (1 <= page_num <= 10):
-            page_num = 1
-    except ValueError:
-        page_num = 1
-
-print("\nChoose the image generation pipeline model to use:")
+print("Choose the image generation pipeline model to use:")
 print("  1. SDXL Base Pipeline (Recommended)")
 print("  2. Stable Diffusion v1.5 Pipeline")
 print("  3. SDXL + LoRA Pipeline")
 choice = input("Enter choice [1, 2, or 3, default is 1]: ").strip()
+if not choice:
+    choice = "1"
 
-if mode_choice == '2':
-    # Emotion-Aware Comic Panels Mode
+print("\nGenerate character sheet reference and component assets first? (y/n, default is y): ", end="")
+gen_assets = input().strip().lower()
+if gen_assets != 'n':
+    print("\nExecuting Component Assets Generation...")
+    if choice == '2':
+        os.chdir("sd15_code")
+        subprocess.run([sys.executable, "run_sd15_pipeline.py"])
+    elif choice == '3':
+        os.chdir("lora_code")
+        subprocess.run([sys.executable, "run_lora_pipeline.py"])
+    else:
+        os.chdir("sdxl_code")
+        subprocess.run([sys.executable, "run_sdxl_pipeline.py"])
+    os.chdir("..")
+
+print("\n" + "=" * 70)
+print("STEP 4: Page-by-Page Storyboard and Panel Generation Loop")
+print("=" * 70)
+
+for page_num in range(1, 11):
+    print(f"\n==========================================")
+    print(f"🎬 PROCESSING PAGE {page_num} OF 10")
+    print(f"==========================================")
+    
+    # 1. Run Fusion Engine for this page
+    os.chdir("langchain_code")
+    result = subprocess.run([sys.executable, "fusion_engine.py", "--page", str(page_num)])
+    if result.returncode != 0:
+        print(f"Error: Storyboard fusion failed for Page {page_num}.")
+        sys.exit(1)
+        
+    # 2. Run Emotion Recognition Engine for this page
+    result = subprocess.run([sys.executable, "emotion_recognition_engine.py", "--page", str(page_num)])
+    if result.returncode != 0:
+        print(f"Error: Emotion recognition failed for Page {page_num}.")
+        sys.exit(1)
+    os.chdir("..")
+    
+    # 3. Generate Panel Images for this page
+    print(f"\n🎨 Drawing panels and compiling layout for Page {page_num}...")
     if choice == '2':
         os.chdir("sd15_code")
         result = subprocess.run([sys.executable, "generate_panels.py", "--page", str(page_num)])
-        if result.returncode != 0:
-            print("Error: SD 1.5 panel generation step failed.")
-            sys.exit(1)
     elif choice == '3':
         os.chdir("lora_code")
         result = subprocess.run([sys.executable, "generate_panels.py", "--page", str(page_num)])
-        if result.returncode != 0:
-            print("Error: SDXL + LoRA panel generation step failed.")
-            sys.exit(1)
     else:
         os.chdir("sdxl_code")
         result = subprocess.run([sys.executable, "generate_panels.py", "--page", str(page_num)])
-        if result.returncode != 0:
-            print("Error: SDXL panel generation step failed.")
-            sys.exit(1)
-else:
-    # Standard Component Assets Mode
-    if choice == '2':
-        os.chdir("sd15_code")
-        result = subprocess.run([sys.executable, "run_sd15_pipeline.py"])
-        if result.returncode != 0:
-            print("Error: SD 1.5 pipeline step failed.")
-            sys.exit(1)
-    elif choice == '3':
-        os.chdir("lora_code")
-        result = subprocess.run([sys.executable, "run_lora_pipeline.py"])
-        if result.returncode != 0:
-            print("Error: SDXL + LoRA pipeline step failed.")
-            sys.exit(1)
-    else:
-        os.chdir("sdxl_code")
-        result = subprocess.run([sys.executable, "run_sdxl_pipeline.py"])
-        if result.returncode != 0:
-            print("Error: SDXL pipeline step failed.")
-            sys.exit(1)
+    os.chdir("..")
+    
+    if result.returncode != 0:
+        print(f"Error: Image generation failed for Page {page_num}.")
+        sys.exit(1)
+        
+    print(f"\n✅ Page {page_num} completed successfully!")
+    
+    # Pause and prompt user
+    if page_num < 10:
+        val = input(f"\n[Press Enter to proceed to Page {page_num+1}, or type 'exit' to quit]: ").strip().lower()
+        if val == 'exit':
+            print("Exiting loop...")
+            break
 
 print("\n" + "=" * 70)
 print("MASTER PIPELINE COMPLETE")
@@ -201,17 +210,6 @@ print("=" * 70)
 
 elapsed_time = time.time() - start_time
 print(f"\nTotal elapsed time: {elapsed_time:.2f} seconds")
-
-print("\nOutput files:")
-if mode_choice == '2':
-    print(f"   Comic Panels: outputs/comics/page_{page_num}_panel_*")
-    print(f"   Horizontal Layout: outputs/comics/page_{page_num}_layout_*_horizontal.png")
-    print(f"   Grid Layout: outputs/comics/page_{page_num}_layout_*_grid.png")
-else:
-    print("   Character: outputs/characters/character_reference.png")
-    print("   Components: outputs/comics/component_1.png through component_N.png")
-    print("   Component Sheet: outputs/comics/component_sheet_horizontal.png and component_sheet_grid_2x2.png")
-
 print("\nDONE")
 print("=" * 70)
 

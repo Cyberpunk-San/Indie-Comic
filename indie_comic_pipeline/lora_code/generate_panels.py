@@ -105,6 +105,36 @@ try:
         
     print("Model loaded successfully")
     
+    # Define paths for IP-Adapter loading
+    char_dir = settings.get("outputs", {}).get("character_dir", "outputs/characters")
+    ref_path = get_output_path(char_dir, "character_reference_sdxl_lora.png")
+    
+    use_ip_adapter = False
+    if os.path.exists(ref_path):
+        print(f"Loading IP-Adapter for character consistency...")
+        try:
+            ip_settings = settings.get("models", {}).get("ipadapter", {})
+            ip_model = ip_settings.get("model", "ip-adapter-faceid-plusv2_sdxl")
+            ip_weight = ip_settings.get("weight", 0.8)
+            
+            # Load IP-Adapter weights
+            if "faceid" in ip_model.lower():
+                try:
+                    pipe.load_ip_adapter("h94/IP-Adapter-FaceID", subfolder="", weight_name="ip-adapter-faceid-plusv2_sdxl.bin")
+                except Exception as fe:
+                    print(f"FaceID IP-Adapter failed to load ({fe}). Falling back to standard IP-Adapter...")
+                    pipe.load_ip_adapter("h94/IP-Adapter", subfolder="sdxl_models", weight_name="ip-adapter_sdxl.bin")
+            else:
+                pipe.load_ip_adapter("h94/IP-Adapter", subfolder="sdxl_models", weight_name="ip-adapter_sdxl.bin")
+                
+            pipe.set_ip_adapter_scale(ip_weight)
+            print("IP-Adapter loaded successfully!")
+            use_ip_adapter = True
+        except Exception as e:
+            print(f"Warning: Failed to load IP-Adapter: {e}. Proceeding without IP-Adapter.")
+    else:
+        print("Reference character image not found. Proceeding without IP-Adapter.")
+    
 except Exception as e:
     print(f"Error: Failed to load model: {e}")
     sys.exit(1)
@@ -141,15 +171,28 @@ for i, panel in enumerate(panels):
     generator = torch.Generator(device=device).manual_seed(seed + args.page * 10 + p_num)
     
     try:
-        image = pipe(
-            prompt=prompt_str,
-            negative_prompt=negative_str,
-            height=height,
-            width=width,
-            num_inference_steps=steps,
-            guidance_scale=guidance,
-            generator=generator
-        ).images[0]
+        if use_ip_adapter and os.path.exists(ref_path):
+            ref_image = Image.open(ref_path).convert("RGB")
+            image = pipe(
+                prompt=prompt_str,
+                negative_prompt=negative_str,
+                ip_adapter_image=ref_image,
+                height=height,
+                width=width,
+                num_inference_steps=steps,
+                guidance_scale=guidance,
+                generator=generator
+            ).images[0]
+        else:
+            image = pipe(
+                prompt=prompt_str,
+                negative_prompt=negative_str,
+                height=height,
+                width=width,
+                num_inference_steps=steps,
+                guidance_scale=guidance,
+                generator=generator
+            ).images[0]
         
         panel_path = get_output_path(comics_dir, f"page_{args.page}_panel_sdxl_lora_{p_num}.png")
         image.save(panel_path)

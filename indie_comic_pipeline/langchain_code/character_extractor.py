@@ -75,8 +75,7 @@ def extract_character_personality(character_name):
     
 
     prompt = ChatPromptTemplate.from_messages([
-
-        ("system", """You are a character analysis expert. Extract personality from ANY fictional character.
+        ("system", """You are a character analysis expert. Extract personality and psychological parameters from ANY fictional character.
         
         To prevent hallucinations and guarantee high-quality descriptive outputs, study the following example:
         
@@ -85,16 +84,14 @@ def extract_character_personality(character_name):
         {{
             "character_name": "Spider-Man",
             "core_personality_traits": ["responsible", "witty", "self-sacrificing", "relatable", "persistent"],
-            "values": ["protecting innocents", "family", "great power equals great responsibility"],
-            "flaws": ["guilt complex", "struggles with double life", "financially insecure"],
-            "behavioral_quirks": ["makes jokes when nervous", "talks to himself", "always late"],
-            "emotional_range": ["hides fear behind humor", "shows determination"],
-            "motivation": "to protect others because he couldn't save Uncle Ben",
-            "catchphrase": "With great power comes great responsibility",
-            "signature_colors": ["red", "blue"],
-            "original_story_summary": "Peter Parker gets bitten by a radioactive spider, ignores his responsibility, leading to his uncle's death. He becomes a hero to make up for it.",
-            "original_character_arc": "Starts as a selfish, nerdy kid. Shifts to a highly responsible, self-sacrificing protector of New York, learning to balance personal desires with hero duties."
+            "personality_development_stories": "Peter Parker started as a selfish teenager who ignored his powers. Following the tragic death of Uncle Ben due to Peter's inaction, he underwent a significant psychological shift, committing himself entirely to selflessness and learning that personal sacrifices are necessary to protect others.",
+            "nature": "Altruistic, hyper-responsible, and hides extreme anxiety behind quick-witted banter and humor.",
+            "characteristics_types": "Enneagram Type 2 (The Helper) / Type 6 (The Loyalist) archetype, fitting the tragic hero narrative.",
+            "favorite_dialogue": "With great power comes great responsibility.",
+            "arc_turn": "From selfish avoidance of responsibility to accepting the painful weight of duty after a preventable tragedy, transforming guilt into active service of others."
         }}
+        
+        CRITICAL REQUIREMENT: You MUST NOT include any physical traits or visual appearance descriptions (e.g. hair color, eyes, costume details, height, build, physical armor). Extract ONLY mental, psychological, behavioral, and dialogue characteristics.
         
         Respond ONLY with valid JSON matching the exact schema above. No other text before or after:
         """),
@@ -103,150 +100,67 @@ def extract_character_personality(character_name):
 
     ])
 
-    
-
     chain = prompt | llm | StrOutputParser()
 
-    
-
     try:
-
         response = chain.invoke({"character": character_name})
-
         
-
-                                                                                      
-
         json_match = re.search(r'\{.*\}', response, re.DOTALL)
-
         if json_match:
-
             personality = json.loads(json_match.group())
-
-                               
-
-            if 'original_story_summary' not in personality:
-
-                personality['original_story_summary'] = "Original hero origins and adventures."
-
-            if 'original_character_arc' not in personality:
-
-                personality['original_character_arc'] = "Starts as an amateur hero and matures into a seasoned protector."
-
-            if 'signature_colors' not in personality:
-
-                personality['signature_colors'] = ["red", "blue"]
-
+            if 'personality_development_stories' not in personality:
+                personality['personality_development_stories'] = "Underwent significant psychological development over time."
+            if 'nature' not in personality:
+                personality['nature'] = "Has a distinct temperament and behavior pattern."
+            if 'characteristics_types' not in personality:
+                personality['characteristics_types'] = "Matches a classic archetype profile."
+            if 'favorite_dialogue' not in personality:
+                personality['favorite_dialogue'] = "Has a notable quote or catchphrase."
+            if 'arc_turn' not in personality:
+                personality['arc_turn'] = "Undergoes a key transition in their moral or psychological worldview."
             return personality
-
         else:
-
             raise ValueError("No JSON found")
 
-            
-
     except Exception as e:
-
         print(f"Error: {e}")
-
         return fallback_character(character_name)
 
 def fallback_character(character_name):
-
-                                                                                            
-
     fallbacks = {
-
         "spiderman": {
-
             "character_name": "Spider-Man",
-
             "core_personality_traits": ["responsible", "witty", "self-sacrificing", "relatable", "persistent"],
-
-            "values": ["protecting innocents", "family", "great power = great responsibility"],
-
-            "flaws": ["guilt complex", "struggles with double life", "financially insecure"],
-
-            "behavioral_quirks": ["makes jokes when nervous", "talks to himself", "always late"],
-
-            "emotional_range": ["hides fear behind humor", "shows determination"],
-
-            "motivation": "to protect others because he couldn't save Uncle Ben",
-
-            "catchphrase": "With great power comes great responsibility",
-
-            "signature_colors": ["red", "blue"],
-
-            "original_story_summary": "Peter Parker gets bitten by a radioactive spider, ignores his responsibility, leading to his uncle's death. He becomes a hero to make up for it.",
-
-            "original_character_arc": "Starts as a selfish, nerdy kid. Shifts to a highly responsible, self-sacrificing protector of New York, learning to balance personal desires with hero duties."
-
+            "personality_development_stories": "Peter Parker started as a selfish teenager who ignored his powers. Following the tragic death of Uncle Ben due to Peter's inaction, he underwent a significant psychological shift, committing himself entirely to selflessness and learning that personal sacrifices are necessary to protect others.",
+            "nature": "Altruistic, hyper-responsible, and hides extreme anxiety behind quick-witted banter and humor.",
+            "characteristics_types": "Enneagram Type 2 (The Helper) / Type 6 (The Loyalist) archetype, fitting the tragic hero narrative.",
+            "favorite_dialogue": "With great power comes great responsibility.",
+            "arc_turn": "From selfish avoidance of responsibility to accepting the painful weight of duty after a preventable tragedy, transforming guilt into active service of others."
         },
-
         "batman": {
-
             "character_name": "Batman",
-
             "core_personality_traits": ["brooding", "strategic", "vengeful", "disciplined", "loner"],
-
-            "values": ["justice", "order", "protecting Gotham", "no killing"],
-
-            "flaws": ["paranoid", "distrustful", "emotionally closed off"],
-
-            "behavioral_quirks": ["speaks in low growl", "works at night", "uses fear"],
-
-            "emotional_range": ["hides all emotions", "shows anger"],
-
-            "motivation": "to avenge his parents' death",
-
-            "catchphrase": "I am vengeance",
-
-            "signature_colors": ["black", "dark grey"],
-
-            "original_story_summary": "Bruce Wayne witnesses his parents' murder as a child, traveling the world to train his mind and body to become the vigilante protector of Gotham City.",
-
-            "original_character_arc": "Shifts from a vengeful orphan driven by rage to a self-disciplined symbol of justice who learns to rely on allies and trust others."
-
+            "personality_development_stories": "Bruce Wayne witnesses his parents' murder as a child, traveling the world to train his mind and body. This trauma transforms him into the vigilante protector of Gotham City, channeling his grief and rage into a disciplined mission of justice.",
+            "nature": "Brooding, hyper-vigilant, highly strategic, and emotionally closed off to protect others.",
+            "characteristics_types": "Enneagram Type 5 (The Investigator) / Type 8 (The Challenger) archetype, vigilante protector.",
+            "favorite_dialogue": "I am vengeance.",
+            "arc_turn": "From a grieving, powerless orphan consumed by rage to a highly disciplined guardian who channels trauma into a lifelong crusade for justice and order."
         }
-
     }
 
-    
-
     name_lower = character_name.lower()
-
     for key in fallbacks:
-
         if key in name_lower:
-
             return fallbacks[key]
 
-    
-
     return {
-
         "character_name": character_name.title(),
-
         "core_personality_traits": ["brave", "determined", "loyal", "resourceful", "compassionate"],
-
-        "values": ["justice", "friendship", "freedom"],
-
-        "flaws": ["stubborn", "sometimes reckless"],
-
-        "behavioral_quirks": ["unique speech pattern"],
-
-        "emotional_range": ["shows courage", "hides fear"],
-
-        "motivation": "to do what's right",
-
-        "catchphrase": "I'll do what's right",
-
-        "signature_colors": ["primary color", "secondary color"],
-
-        "original_story_summary": f"The original background story and origins of {character_name}.",
-
-        "original_character_arc": f"The development path where {character_name} overcomes challenges and matures."
-
+        "personality_development_stories": f"The development path where {character_name} overcomes psychological challenges and matures.",
+        "nature": "Determined and protective.",
+        "characteristics_types": "Classic hero archetype.",
+        "favorite_dialogue": "I will do what is right.",
+        "arc_turn": "From vulnerability or isolation to finding strength and purpose in defending a larger cause."
     }
 
                                                                    
@@ -297,17 +211,16 @@ print(f"Name: {personality['character_name']}")
 
 print(f"\nCore Traits: {', '.join(personality['core_personality_traits'])}")
 
-print(f"Values: {', '.join(personality['values'])}")
+print(f"Stories: {personality['personality_development_stories']}")
 
-print(f"Flaws: {', '.join(personality['flaws'])}")
+print(f"Nature: {personality['nature']}")
 
-print(f"Motivation: {personality['motivation']}")
+print(f"Archetype: {personality['characteristics_types']}")
 
-if personality.get('catchphrase'):
+print(f"Favorite Dialogue: {personality['favorite_dialogue']}")
 
-    print(f"Catchphrase: {personality['catchphrase']}")
+print(f"Arc Turn: {personality['arc_turn']}")
 
-                                                                
 
 fusion_dir = settings.get("outputs", {}).get("fusion_dir", "outputs/fusion")
 

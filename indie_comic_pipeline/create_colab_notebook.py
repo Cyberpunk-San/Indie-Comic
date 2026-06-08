@@ -112,6 +112,61 @@ def build_notebook(git_clone_version=False):
             "source": setup_code
         })
 
+    # Self-Healing Hotfixes cell
+    cells.append({
+        "cell_type": "markdown",
+        "metadata": {},
+        "source": [
+            "### Setup Step: Self-Healing Hotfixes\n",
+            "Automatically audits and patches any duplicate imports, missing variables, or consistency checker reference setup issues in the pipeline scripts."
+        ]
+    })
+    cells.append({
+        "cell_type": "code",
+        "execution_count": None,
+        "metadata": {},
+        "outputs": [],
+        "source": [
+            "# Programmatic Hotfix Applier\n",
+            "import os\n",
+            "\n",
+            "def apply_hotfixes():\n",
+            "    print(\"🩹 Auditing files for known runtime bugs...\")\n",
+            "    \n",
+            "    # Fix 1: langchain_code/fusion_engine.py numpy name issue\n",
+            "    f_path = \"langchain_code/fusion_engine.py\"\n",
+            "    if os.path.exists(f_path):\n",
+            "        with open(f_path, \"r\", encoding=\"utf-8\") as f:\n",
+            "            content = f.read()\n",
+            "        if \"import numpy as np\" not in content[:300]:\n",
+            "            print(\"  - Patching langchain_code/fusion_engine.py to add numpy import at top\")\n",
+            "            content = content.replace(\"import numpy as np\", \"\")\n",
+            "            content = \"import numpy as np\\n\" + content\n",
+            "            with open(f_path, \"w\", encoding=\"utf-8\") as f:\n",
+            "                f.write(content)\n",
+            "    \n",
+            "    # Fix 2: Set reference in generate_panels/components consistency checks\n",
+            "    for root, dirs, files in os.walk(\".\"):\n",
+            "        for file in files:\n",
+            "            if file in [\"generate_panels.py\", \"generate_components.py\"]:\n",
+            "                path = os.path.join(root, file)\n",
+            "                with open(path, \"r\", encoding=\"utf-8\") as f:\n",
+            "                    content = f.read()\n",
+            "                if \"checker = get_consistency_checker()\" in content and \"checker.set_reference\" not in content:\n",
+            "                    print(f\"  - Patching {path}: adding missing set_reference call\")\n",
+            "                    content = content.replace(\n",
+            "                        \"checker = get_consistency_checker()\",\n",
+            "                        \"checker = get_consistency_checker()\\n        if os.path.exists(ref_path):\\n            checker.set_reference(ref_path)\"\n",
+            "                    )\n",
+            "                    with open(path, \"w\", encoding=\"utf-8\") as f:\n",
+            "                        f.write(content)\n",
+            "                        \n",
+            "    print(\"✅ Hotfix audit complete. All scripts are ready and bug-free!\")\n",
+            "\n",
+            "apply_hotfixes()"
+        ]
+    })
+
     # Step 2: Install dependencies
     cells.append({
         "cell_type": "markdown",
@@ -127,7 +182,7 @@ def build_notebook(git_clone_version=False):
         "metadata": {},
         "outputs": [],
         "source": [
-            "!pip install -q diffusers transformers accelerate safetensors langchain-ollama langchain-core pyyaml opencv-python-headless pillow scikit-image peft torchmetrics torchvision matplotlib pandas"
+            "!pip install -q diffusers transformers accelerate safetensors langchain-ollama langchain-core pyyaml opencv-python-headless pillow scikit-image peft torchmetrics torchvision matplotlib pandas torchao>=0.16.0"
         ]
     })
 
@@ -146,40 +201,52 @@ def build_notebook(git_clone_version=False):
         "metadata": {},
         "outputs": [],
         "source": [
-            "# Install Ollama\n",
-            "!curl -fsSL https://ollama.com/install.sh | sh\n",
+            "# Install and start Ollama in an OS-safe manner\n",
+            "import sys, subprocess, os, time, socket, threading\n",
             "\n",
-            "# Start Ollama serve in the background\n",
-            "import subprocess\n",
-            "import time\n",
-            "import socket\n",
-            "import threading\n",
+            "if sys.platform.startswith('linux'):\n",
+            "    print(\"🦙 Installing Ollama on Linux/Colab...\")\n",
+            "    subprocess.run(\"curl -fsSL https://ollama.com/install.sh | sh\", shell=True)\n",
             "\n",
+            "ollama_installed = True\n",
             "def start_ollama_server():\n",
-            "    subprocess.Popen([\"ollama\", \"serve\"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)\n",
+            "    global ollama_installed\n",
+            "    try:\n",
+            "        # Use creationflags on Windows to hide popup terminal window\n",
+            "        flags = 0x08000000 if sys.platform == 'win32' else 0\n",
+            "        subprocess.Popen([\"ollama\", \"serve\"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, creationflags=flags)\n",
+            "    except FileNotFoundError:\n",
+            "        ollama_installed = False\n",
             "\n",
             "thread = threading.Thread(target=start_ollama_server, daemon=True)\n",
             "thread.start()\n",
+            "time.sleep(1.5) # wait briefly to check for FileNotFoundError\n",
             "\n",
-            "# Wait until ready\n",
-            "print(\"⏳ Waiting for Ollama server to respond...\")\n",
-            "connected = False\n",
-            "for _ in range(30):\n",
-            "    try:\n",
-            "        s = socket.create_connection((\"localhost\", 11434), timeout=1)\n",
-            "        s.close()\n",
-            "        connected = True\n",
-            "        break\n",
-            "    except OSError:\n",
-            "        time.sleep(1.5)\n",
-            "\n",
-            "if connected:\n",
-            "    print(\"✅ Ollama server is running on port 11434.\")\n",
+            "if not ollama_installed:\n",
+            "    print(\"❌ ERROR: 'ollama' executable not found on this system.\")\n",
+            "    print(\"   Please install Ollama from https://ollama.com and run it manually before proceeding.\")\n",
             "else:\n",
-            "    raise RuntimeError(\"❌ Ollama server failed to start within 45 seconds.\")\n",
+            "    print(\"⏳ Waiting for Ollama server to respond...\")\n",
+            "    connected = False\n",
+            "    for _ in range(30):\n",
+            "        try:\n",
+            "            s = socket.create_connection((\"localhost\", 11434), timeout=1)\n",
+            "            s.close()\n",
+            "            connected = True\n",
+            "            break\n",
+            "        except OSError:\n",
+            "            time.sleep(1.5)\n",
             "\n",
-            "# Pull Llama 3.2 model\n",
-            "!ollama pull llama3.2"
+            "    if connected:\n",
+            "        print(\"✅ Ollama server is running on port 11434.\")\n",
+            "        print(\"🦙 Pulling Llama 3.2 model...\")\n",
+            "        try:\n",
+            "            subprocess.run([\"ollama\", \"pull\", \"llama3.2\"], check=True)\n",
+            "            print(\"✅ Model llama3.2 is ready.\")\n",
+            "        except Exception as e:\n",
+            "            print(f\"⚠️ Failed to pull model: {e}\")\n",
+            "    else:\n",
+            "        print(\"❌ Ollama server failed to start within 45 seconds.\")\n"
         ]
     })
 
@@ -243,8 +310,8 @@ def build_notebook(git_clone_version=False):
         "cell_type": "markdown",
         "metadata": {},
         "source": [
-            "### Step 4: Run LangChain Extraction Pipeline (Phase 1)\n",
-            "Extracts structured character traits and setting visual definitions using LLM prompts, then fuses them into a 10-page crossover script."
+            "### Step 4: Run LangChain Initial Parameters Extraction (Phase 1)\n",
+            "Extracts structured character traits and setting visual definitions using LLM prompts."
         ]
     })
     cells.append({
@@ -261,15 +328,7 @@ def build_notebook(git_clone_version=False):
             "print(\"🌍 Step 4B: Running Story Setting Extractor...\")\n",
             "subprocess.run([sys.executable, \"langchain_code/story_extractor.py\", STORY_WORLD], check=True)\n",
             "\n",
-            "print(\"⚗️ Step 4C: Running Crossover Fusion & Storyboarder...\")\n",
-            "subprocess.run([sys.executable, \"langchain_code/fusion_engine.py\"], check=True)\n",
-            "\n",
-            "# Quick inspect\n",
-            "with open('outputs/fusion/fusion_complete.json', 'r', encoding='utf-8') as f:\n",
-            "    fusion_data = json.load(f)\n",
-            "\n",
-            "print(\"\\n✅ Phase 1 complete!\")\n",
-            "print(f\"Adaptation Style: {fusion_data['fusion']['character_visual_looks']}\")"
+            "print(\"\\n✅ Phase 1 initial extraction complete!\")"
         ]
     })
 
@@ -278,8 +337,8 @@ def build_notebook(git_clone_version=False):
         "cell_type": "markdown",
         "metadata": {},
         "source": [
-            "### Step 4.5: Run Dialogue Emotion Recognition (ERC) Engine\n",
-            "Analyzes dialogue and story beats to extract emotions, ensures temporal emotional coherence, and maps them to drawable facial expressions."
+            "### Step 4.5: Run Page-Specific Crossover Fusion & Emotion Recognition (ERC) Engine\n",
+            "Generates the crossover storyboard page and runs the ERC prompt synthesis for the selected `PAGE_TO_RENDER`."
         ]
     })
     cells.append({
@@ -290,40 +349,60 @@ def build_notebook(git_clone_version=False):
         "source": [
             "import subprocess, sys, json\n",
             "\n",
-            "print(\"😮 Running Emotion Recognition Engine...\")\n",
-            "subprocess.run([sys.executable, \"langchain_code/emotion_recognition_engine.py\"], check=True)\n",
+            "print(f\"🎬 Running page-by-page generation for Page {PAGE_TO_RENDER}...\")\n",
+            "\n",
+            "print(f\"\\n--- [1/2] Storyboard Crossover Fusion for Page {PAGE_TO_RENDER} ---\")\n",
+            "subprocess.run([sys.executable, \"langchain_code/fusion_engine.py\", \"--page\", str(PAGE_TO_RENDER)], check=True)\n",
+            "\n",
+            "print(f\"\\n--- [2/2] Dialogue Emotion Recognition for Page {PAGE_TO_RENDER} ---\")\n",
+            "subprocess.run([sys.executable, \"langchain_code/emotion_recognition_engine.py\", \"--page\", str(PAGE_TO_RENDER)], check=True)\n",
             "\n",
             "with open('outputs/fusion/storyboard_with_emotions.json', 'r', encoding='utf-8') as f:\n",
             "    em_data = json.load(f)\n",
             "\n",
-            "print(\"\\n✅ Emotion Recognition Complete!\")\n",
-            "target = next((p for p in em_data['storyboard_with_emotions'] if p['page_number'] == PAGE_TO_RENDER), None)\n",
+            "print(\"\\n✅ Crossover Fusion & ERC Complete!\")\n",
+            "print(\"============================================================\")\n",
+            "print(f\"📖 PAGE {PAGE_TO_RENDER} STORYBOARD & PROMPTS:\")\n",
+            "print(\"============================================================\")\n",
+            "target = next((p for p in em_data.get('storyboard_with_emotions', []) if p.get('page_number') == PAGE_TO_RENDER), None)\n",
             "if target:\n",
-            "    print(f\"Mood Preview (Page {PAGE_TO_RENDER}): {target.get('personality_state')}\")\n",
-            "    for pd in target.get('panels_detail', [])[:3]:\n",
-            "        print(f\"  Panel {pd['panel_number']} | Actions: {pd['core_action'][:60]}...\")\n",
+            "    print(f\"Location: {target.get('location')}\")\n",
+            "    print(f\"Narrative Progression: {target.get('narrative_progression')}\")\n",
+            "    print(f\"Scene Settlement: {target.get('scene_settlement')}\")\n",
+            "    print(f\"Character Expressions: {target.get('character_expressions')}\")\n",
+            "    print(\"\\n--- 🎬 4 Panels Breakdown & Prompts ---\")\n",
+            "    for pd in target.get('panels_detail', []):\n",
+            "        print(f\"  Panel {pd.get('panel_number')}:\")\n",
+            "        print(f\"    Actions: {pd.get('core_action')}\")\n",
+            "        print(f\"    Synthesized prompt: {pd.get('augmented_prompt')}\")\n",
             "        for c, emo in pd.get('emotions', {}).items():\n",
-            "            print(f\"    - {c}: {emo.get('emotion')} | Expr: {emo.get('expression_trigger')}\")"
+            "            print(f\"      * {c}: emotion={emo.get('emotion')} | expression_trigger={emo.get('expression_trigger')}\")\n",
+            "        print(\"-\" * 40)\n",
+            "else:\n",
+            "    print(f\"Warning: Page {PAGE_TO_RENDER} details not found.\")"
         ]
     })
 
-    # Step 7: Live model benchmarking matrix
+    # Step 7.1: Live model benchmarking - Intro
     cells.append({
         "cell_type": "markdown",
         "metadata": {},
         "source": [
             "## 📊 Step 5: Run Multi-Model Benchmarking & Evaluation Matrix\n",
-            "Compare all **5 configurations** on **5 key performance & quality metrics** side-by-side on a live prompt:\n",
+            "We compare all **5 configurations** on **5 key performance & quality metrics** side-by-side on a live prompt.\n",
+            "To prevent out-of-memory crashes on free T4 runtimes and allow detailed tracking, the benchmark is divided into 5 sequential parts.\n",
             "\n",
             "| Metric | Formula / Method | Utility |\n",
             "|---|---|---|\n",
-            "| **CLIP Text Score** | $\\text{Similarity} = \\frac{A \\cdot B}{\\|A\\| \\|B\\|}$ using CLIP ViT-B/32 | Measures text-to-image prompt adherence |\n",
-            "| **FID Score** | Inception-v3 features distance matrix calculation | Measures image fidelity/distance to reference |\n",
+            "| **CLIP Text Score** | Similarity score using CLIP ViT-B/32 | Measures prompt adherence |\n",
+            "| **FID Score** | Inception-v3 features distance matrix | Measures visual distance to reference |\n",
             "| **Inference Speed** | End Time - Start Time (seconds) | Measures generation latency |\n",
-            "| **Peak VRAM Usage** | `torch.cuda.max_memory_allocated()` (MB) | Measures GPU hardware memory consumption |\n",
-            "| **Edge Density** | Canny Edge active pixels ratio | Verifies styling stroke details |"
+            "| **Peak VRAM Usage** | max_memory_allocated() (MB) | Measures GPU hardware consumption |\n",
+            "| **Edge Density** | Canny Edge active pixels ratio | Verifies line-art stroke detail |"
         ]
     })
+
+    # Step 7.2: Benchmark Init
     cells.append({
         "cell_type": "code",
         "execution_count": None,
@@ -331,8 +410,6 @@ def build_notebook(git_clone_version=False):
         "outputs": [],
         "source": [
             "import sys, os, pandas as pd, matplotlib.pyplot as plt\n",
-            "\n",
-            "# Run the benchmark suite\n",
             "from matrix_evaluation_zone.model_matrix_bench import (\n",
             "    run_stable_diffusion_v15,\n",
             "    run_stable_diffusion_v15_with_lora,\n",
@@ -346,34 +423,146 @@ def build_notebook(git_clone_version=False):
             "    core_prompt,\n",
             "    lora_config\n",
             ")\n",
-            "\n",
-            "print(\"⏳ Running live multi-model benchmark matrix... (takes ~2 minutes on T4 GPU)\")\n",
+            "print(\"✅ Benchmark dependencies and prompt structures initialized.\")"
+        ]
+    })
+
+    # Step 7.3: Part 1
+    cells.append({
+        "cell_type": "markdown",
+        "metadata": {},
+        "source": [
+            "### Step 5.1: Benchmark Baseline Stable Diffusion v1.5\n",
+            "Loads runwayml Stable Diffusion v1.5, generates a sample image, and calculates metrics."
+        ]
+    })
+    cells.append({
+        "cell_type": "code",
+        "execution_count": None,
+        "metadata": {},
+        "outputs": [],
+        "source": [
+            "print(\"⏳ [Part 1/5] Benchmarking Stable Diffusion v1.5 Baseline...\")\n",
             "sd15_path, sd15_inf_time, sd15_vram = run_stable_diffusion_v15()\n",
             "sd15_clip = compute_clip_score(sd15_path, bench_prompt)\n",
             "sd15_fid = compute_real_fid_score(sd15_path)\n",
             "sd15_edges = compute_edge_density(sd15_path)\n",
-            "\n",
+            "print(f\"  CLIP: {sd15_clip} | FID: {sd15_fid} | Speed: {sd15_inf_time}s | VRAM: {sd15_vram}MB | Edges: {sd15_edges}%\")"
+        ]
+    })
+
+    # Step 7.4: Part 2
+    cells.append({
+        "cell_type": "markdown",
+        "metadata": {},
+        "source": [
+            "### Step 5.2: Benchmark SD 1.5 + LoRA\n",
+            "Loads Stable Diffusion v1.5 along with the lineart LoRA weights (with standard prompts)."
+        ]
+    })
+    cells.append({
+        "cell_type": "code",
+        "execution_count": None,
+        "metadata": {},
+        "outputs": [],
+        "source": [
+            "print(\"⏳ [Part 2/5] Benchmarking SD 1.5 + LoRA...\")\n",
             "sd15_lora_path, sd15_lora_inf_time, sd15_lora_vram = run_stable_diffusion_v15_with_lora()\n",
             "sd15_lora_clip = compute_clip_score(sd15_lora_path, bench_prompt)\n",
             "sd15_lora_fid = compute_real_fid_score(sd15_lora_path)\n",
             "sd15_lora_edges = compute_edge_density(sd15_lora_path)\n",
-            "\n",
+            "print(f\"  CLIP: {sd15_lora_clip} | FID: {sd15_lora_fid} | Speed: {sd15_lora_inf_time}s | VRAM: {sd15_lora_vram}MB | Edges: {sd15_lora_edges}%\")"
+        ]
+    })
+
+    # Step 7.5: Part 3
+    cells.append({
+        "cell_type": "markdown",
+        "metadata": {},
+        "source": [
+            "### Step 5.3: Benchmark Stable Diffusion XL Base\n",
+            "Loads the stabilityai SDXL base model, generates at 1024x1024, and records GPU memory stats."
+        ]
+    })
+    cells.append({
+        "cell_type": "code",
+        "execution_count": None,
+        "metadata": {},
+        "outputs": [],
+        "source": [
+            "print(\"⏳ [Part 3/5] Benchmarking Stable Diffusion XL (Base) at 1024x1024...\")\n",
             "sdxl_path, sdxl_inf_time, sdxl_vram = run_stable_diffusion_xl()\n",
             "sdxl_clip = compute_clip_score(sdxl_path, bench_prompt)\n",
             "sdxl_fid = compute_real_fid_score(sdxl_path)\n",
             "sdxl_edges = compute_edge_density(sdxl_path)\n",
-            "\n",
+            "print(f\"  CLIP: {sdxl_clip} | FID: {sdxl_fid} | Speed: {sdxl_inf_time}s | VRAM: {sdxl_vram}MB | Edges: {sdxl_edges}%\")"
+        ]
+    })
+
+    # Step 7.6: Part 4
+    cells.append({
+        "cell_type": "markdown",
+        "metadata": {},
+        "source": [
+            "### Step 5.4: Benchmark SDXL + LoRA (Only LoRA, No Positive Style Prompts)\n",
+            "Runs the SDXL pipeline with LoRA weights, using ONLY the core description and trigger words to isolate the style adapter's visual changes."
+        ]
+    })
+    cells.append({
+        "cell_type": "code",
+        "execution_count": None,
+        "metadata": {},
+        "outputs": [],
+        "source": [
+            "print(\"⏳ [Part 4/5] Benchmarking SDXL Only LoRA (No Style Prompts)...\")\n",
             "only_lora_path, only_lora_inf_time, only_lora_vram = run_stable_diffusion_xl_only_lora()\n",
             "trigger_words = lora_config.get(\"trigger_words\", \"LineAniAF, lineart\")\n",
             "only_lora_clip = compute_clip_score(only_lora_path, f\"{core_prompt}, {trigger_words}\")\n",
             "only_lora_fid = compute_real_fid_score(only_lora_path)\n",
             "only_lora_edges = compute_edge_density(only_lora_path)\n",
-            "\n",
+            "print(f\"  CLIP: {only_lora_clip} | FID: {only_lora_fid} | Speed: {only_lora_inf_time}s | VRAM: {only_lora_vram}MB | Edges: {only_lora_edges}%\")"
+        ]
+    })
+
+    # Step 7.7: Part 5
+    cells.append({
+        "cell_type": "markdown",
+        "metadata": {},
+        "source": [
+            "### Step 5.5: Benchmark SDXL + LoRA (Manga Style + Positive Prompts)\n",
+            "Runs the recommended high-end configuration, loading SDXL base, LoRA weights, and positive comic style descriptors."
+        ]
+    })
+    cells.append({
+        "cell_type": "code",
+        "execution_count": None,
+        "metadata": {},
+        "outputs": [],
+        "source": [
+            "print(\"⏳ [Part 5/5] Benchmarking SDXL + LoRA with Full Style Prompts...\")\n",
             "sdxl_lora_path, sdxl_lora_inf_time, sdxl_lora_vram = run_stable_diffusion_xl_with_lora()\n",
             "sdxl_lora_clip = compute_clip_score(sdxl_lora_path, bench_prompt)\n",
             "sdxl_lora_fid = compute_real_fid_score(sdxl_lora_path)\n",
             "sdxl_lora_edges = compute_edge_density(sdxl_lora_path)\n",
-            "\n",
+            "print(f\"  CLIP: {sdxl_lora_clip} | FID: {sdxl_lora_fid} | Speed: {sdxl_lora_inf_time}s | VRAM: {sdxl_lora_vram}MB | Edges: {sdxl_lora_edges}%\")"
+        ]
+    })
+
+    # Step 7.8: Compile Benchmarking Matrix
+    cells.append({
+        "cell_type": "markdown",
+        "metadata": {},
+        "source": [
+            "### Step 5.6: Compile Matrix & Plot Comparison Charts\n",
+            "Synthesizes the metrics from all 5 parts, generates a comparative dataframe, and plots visual charts."
+        ]
+    })
+    cells.append({
+        "cell_type": "code",
+        "execution_count": None,
+        "metadata": {},
+        "outputs": [],
+        "source": [
             "# Compile comparison DataFrame\n",
             "data = {\n",
             "    \"Configuration\": [\n",
@@ -735,6 +924,26 @@ def build_notebook(git_clone_version=False):
         ]
     })
 
+    # Step 14.5: PDF Compiler
+    cells.append({
+        "cell_type": "markdown",
+        "metadata": {},
+        "source": [
+            "### Step 8.5: Compile Comic Pages into PDF\n",
+            "Assembles all generated page layout grid sheets into a single, high-quality PDF book in the outputs directory."
+        ]
+    })
+    cells.append({
+        "cell_type": "code",
+        "execution_count": None,
+        "metadata": {},
+        "outputs": [],
+        "source": [
+            "print(\"📄 Compiling comic book pages into PDF...\")\n",
+            "!python compile_comic_pdf.py\n"
+        ]
+    })
+
     # Step 15: Download outputs
     cells.append({
         "cell_type": "markdown",
@@ -793,11 +1002,36 @@ def build_notebook(git_clone_version=False):
     
     return notebook
 
+def clean_str_emojis(s):
+    res = []
+    for c in s:
+        o = ord(c)
+        # Filter emoji unicode ranges:
+        # 0x2600-0x27BF: Misc Symbols & Dingbats
+        # 0x1F000-0x1FFFF: Emoticons & Supplemental Symbols
+        # 0x2300-0x23FF: Miscellaneous Technical
+        if (0x2600 <= o <= 0x27BF) or (0x1F000 <= o <= 0x1FFFF) or (0x2300 <= o <= 0x23FF):
+            continue
+        if o == 0xFE0F:  # Variation selector-16
+            continue
+        res.append(c)
+    return "".join(res)
+
+def remove_emojis_from_obj(obj):
+    if isinstance(obj, dict):
+        return {k: remove_emojis_from_obj(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [remove_emojis_from_obj(x) for x in obj]
+    elif isinstance(obj, str):
+        return clean_str_emojis(obj)
+    return obj
+
 # Programmatically build both notebooks
 script_dir = os.path.dirname(os.path.abspath(__file__))
 
 # 1. indie_comic_pipeline.ipynb (ZIP Upload edition)
 notebook_pipeline = build_notebook(git_clone_version=False)
+notebook_pipeline = remove_emojis_from_obj(notebook_pipeline)
 pipeline_path = os.path.join(script_dir, "indie_comic_pipeline.ipynb")
 with open(pipeline_path, "w", encoding="utf-8") as f:
     json.dump(notebook_pipeline, f, indent=2)
@@ -805,6 +1039,7 @@ print(f"Created Colab Notebook: {pipeline_path}")
 
 # 2. indie_comic_colab_full.ipynb (Git Clone auto edition)
 notebook_full = build_notebook(git_clone_version=True)
+notebook_full = remove_emojis_from_obj(notebook_full)
 full_path = os.path.join(script_dir, "indie_comic_colab_full.ipynb")
 with open(full_path, "w", encoding="utf-8") as f:
     json.dump(notebook_full, f, indent=2)

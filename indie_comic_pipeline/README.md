@@ -172,6 +172,74 @@ Script: [create_colab_notebook.py](file:///c:/Users/Dell/Downloads/drid/indie_co
 
 ---
 
+## 📝 Storyboard & Prompt Synthesis Crossover Example
+
+To demonstrate how the parameters are fused and mapped to visual prompts, here is an example execution trace for **Spider-Man** in the **Cyberpunk 2077** universe:
+
+### 1. Extracted Parameters (Psychological + Environment)
+* **Character (Spider-Man)**: Altruistic, hides extreme anxiety behind quick-witted banter (`nature`), and is transforming guilt into service of others (`arc_turn`).
+* **Setting (Cyberpunk 2077)**: Rain-slicked streets, towering dark skyscrapers, corporate neon signs (`environment_description`). Vibes: High-tech, low-life, corporate oppression.
+
+### 2. Storyboard Page Breakdown (Page 1, Panel 1)
+```json
+{
+  "page_number": 1,
+  "location": "Rain-slicked neon street, Night City",
+  "panels_breakdown": [
+    "Panel 1: Spider-Man stands on a fire escape, looking down at a crowded corporate square. He is shivering under a high-tech coat but his mask eye-lenses are narrowed in focus. Dialogue: 'Uncle Ben... this city is darker than New York, but the duty is the same.'"
+  ],
+  "scene_settlement": "Spider-Man wearing a high-collared deep crimson jacket over a dark blue bodysuit, steam rising from street vents below, colossal holographic advertisements looming in the background",
+  "character_expressions": "shoulders hunched, head tilted down, white mask eye-lenses narrowed in pensive contemplation"
+}
+```
+
+### 3. Emotion Recognition & Expression Mapping (ERC Output)
+The ERC engine runs Llama 3.2 to parse the panel dialogue and action, outputting:
+* **Active Character**: `Spider-Man`
+* **Detected Emotion**: `sad / persistent (high intensity)`
+* **Facial Expression Trigger**: `"eyes narrowed in grief, head slightly bowed, shoulders hunched forward against the cold wind"`
+* **Core Action**: `Spider-Man standing still on a metallic fire escape looking down`
+* **Background Env**: `rain-slicked streets of Night City with towering neon skyscrapers`
+
+### 4. Synthesized Visual Prompt Passed to Generation Pipeline + IP-Adapter
+```text
+indie comic style illustration, clean minimalist line art, flat color palette, crisp continuous outlines, cel-shaded with no gradients, Spider-Man standing still on a metallic fire escape looking down, consistent Spider-Man, Spider-Man in adapted clothing matching the High-tech, low-life, gritty noir, corporate oppression, eyes narrowed in grief, head slightly bowed, shoulders hunched forward against the cold wind, shoulders hunched, head tilted down, white mask eye-lenses narrowed in pensive contemplation, in rain-slicked streets of Night City with towering neon skyscrapers, Spider-Man wearing a high-collared deep crimson jacket over a dark blue bodysuit, steam rising from street vents below, colossal holographic advertisements looming in the background, dramatic noir lighting, foggy overcast
+```
+
+Depending on the configuration selected by the orchestrator:
+* **SDXL Base or SDXL + LoRA**: Renders at `1024x1024` resolution. If LoRA is enabled, the pipeline appends the Manga trigger words (`LineAniAF, lineart`), loads the LoRA weights, and utilizes the SDXL FaceID or standard SDXL IP-Adapter weights.
+* **Stable Diffusion v1.5 + LoRA**: Renders at `512x512` resolution. It automatically appends trigger words and loads the standard SD 1.5 IP-Adapter weights (`ip-adapter_sd15.bin`) to ensure consistency.
+
+The synthesized prompt is passed alongside the corresponding character reference image (`character_reference.png`, `character_reference_sdxl_lora.png`, or `character_reference_sd15.png`) to condition the diffusion generation.
+
+---
+
+## 🔄 Page-by-Page Sequential Execution Loop (Context Exhaustion Prevention)
+
+Generating a complete 10-page, 40-panel storyboard in a single LLM call causes context window exhaustion, trailing-comma JSON syntax truncation, and narrative hallucinations. 
+To prevent this, the pipeline implements a sequential page-by-page execution loop:
+1. **CommandLine Argument `--page X`**: Both the storyboard fuser (`fusion_engine.py`) and the emotion recognition parser (`emotion_recognition_engine.py`) support processing a specific page `X` (1-10) individually.
+2. **Context Persistence**:
+   - For `page == 1`, the fuser generates the high-level crossover story (`story_descriptive`), crossover visual looks, and details of Page 1 (4 panels).
+   - For `page > 1`, the script loads the existing `fusion_complete.json`, reads all panels from pages `1` to `X-1` as a history window, and feeds it into the LLM system prompt to write Page `X`'s storyboard details (ensuring narrative continuity and character arc alignment).
+   - Results are appended to `fusion_complete.json` page-by-page.
+3. **Selective ERC Annotation**: The ERC parser processes only the panels of page `X`, keeping previous panels' emotional states as history context, and updates the annotated storyboard in `storyboard_with_emotions.json`.
+
+---
+
+## 👤 IP-Adapter Face & Feature Consistency Integration
+
+To enforce facial and clothing features stability across all panels, the pipeline integrates IP-Adapter support directly within the panel and component generation workflows:
+1. **Reference Sheet Anchor**:
+   - First, the character generator script (`generate_character.py`) creates a high-quality initial character reference profile (`character_reference.png`).
+2. **IP-Adapter Loading**:
+   - Both `generate_panels.py` and `generate_components.py` load IP-Adapter onto the Stable Diffusion pipeline using `pipe.load_ip_adapter()`.
+   - **Multi-Model Support**: The configuration supports loading specific IP-Adapters. For SDXL configurations, it tries to load FaceID-PlusV2 (`ip-adapter-faceid-plusv2_sdxl.bin`); if it fails (e.g. if `insightface` compilation is missing on the machine), it falls back to standard SDXL IP-Adapter (`ip-adapter_sdxl.bin`) from the hub. For SD 1.5 pipelines, it loads the standard SD 1.5 IP-Adapter (`ip-adapter_sd15.bin`).
+3. **Reference Conditioning**:
+   - The reference profile image is passed via the `ip_adapter_image` argument to pipeline calls. This forces the diffusion process to match facial contours and styling cues while generating new poses, actions, and expressions.
+
+---
+
 ## 🚀 Execution Guide
 
 ### A. End-to-End Orchestrated run

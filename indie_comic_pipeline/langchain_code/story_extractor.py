@@ -75,37 +75,43 @@ def extract_story_setting(story_name):
     
 
     prompt = ChatPromptTemplate.from_messages([
-
-        ("system", """You are a setting analysis expert. Extract world details from any story.
+        ("system", """You are a setting analysis expert. Extract world details from any story or movie universe.
         
         To prevent hallucinations and guarantee high-quality descriptive outputs, study the following example:
         
-        Example Input: Wuthering Heights
+        Example Input: Cyberpunk 2077
         Example Output:
         {{
-            "story_name": "Wuthering Heights",
-            "era": "Victorian era, late 1700s-1800s",
-            "location": "Yorkshire moors, England",
-            "environment_description": "windswept moors, wild heather, stormy skies, isolated stone manor",
-            "mood": "gothic, tragic, passionate, brooding",
-            "color_palette": ["dark green", "grey", "brown", "muted purple", "stormy blue"],
-            "visual_elements": ["stone walls", "graveyards", "storm clouds", "candles", "old books"],
-            "lighting": "dim, candlelit, stormy natural light",
-            "weather": "stormy, windy, foggy",
-            "theme": "destructive passion, social class barriers, and obsessive cycles of revenge",
-            "dialogue_style_and_tone": "Formal, dramatic, poetic, and archaic Victorian dialogue.",
-            "cinematographic_visual_style": "High contrast, dark brooding shadows, wide shots of isolated landscapes, low key natural lighting.",
+            "story_name": "Cyberpunk 2077",
+            "genre": "Sci-Fi / Cyberpunk / Dystopian Thriller",
+            "environment_description": "Rain-slicked asphalt streets reflecting neon signs, colossal dark skyscrapers looming overhead, industrial steam vents, high-tech vehicles, crowded street markets.",
+            "theme_color_associated": ["neon pink", "electric cyan", "canary yellow", "deep obsidian black", "chrome silver"],
+            "vibes": "High-tech, low-life, gritty noir, corporate oppression, rebellious underground energy.",
             "key_side_characters": [
                 {{
-                    "name": "Heathcliff",
-                    "default_personality": "brooding, intense, vengeful, passionate yet cruel"
+                    "name": "Jackie Welles",
+                    "default_personality": "Loyal, boisterous, ambitious, family-oriented street mercenary",
+                    "relation_to_main": "Partner-in-crime and trusted companion who helps guide the main character through the city's dangerous underworld"
                 }},
                 {{
-                    "name": "Catherine Earnshaw",
-                    "default_personality": "spirited, volatile, rebellious, torn between status and love"
+                    "name": "Johnny Silverhand",
+                    "default_personality": "Charismatic rockerboy, cynical, rebellious, anti-corporate anarchist",
+                    "relation_to_main": "Vocal mentor and internal foil who pushes the main character to rebel against the dominant systems"
+                }},
+                {{
+                    "name": "Judy Alvarez",
+                    "default_personality": "Talented braindance editor, artistic, empathetic, fiercely loyal to friends",
+                    "relation_to_main": "Technical ally who assists with digital investigations and offers emotional support"
+                }},
+                {{
+                    "name": "Panam Palmer",
+                    "default_personality": "Hot-headed, passionate, independent Nomad clan outcast",
+                    "relation_to_main": "Combat driver and loyalty-driven ally who assists in high-stakes structural raids"
                 }}
             ]
         }}
+        
+        CRITICAL REQUIREMENT: You MUST extract between 3 and 6 key side characters from the target story world. Define their name, default personality, and how they would relate to the main character in this crossover.
         
         Respond ONLY with valid JSON matching the exact schema above. No other text before or after:
         """),
@@ -114,172 +120,74 @@ def extract_story_setting(story_name):
 
     ])
 
-    
-
     chain = prompt | llm | StrOutputParser()
 
-    
-
     try:
-
         response = chain.invoke({"story": story_name})
-
         json_match = re.search(r'\{.*\}', response, re.DOTALL)
-
         if json_match:
-
             setting = json.loads(json_match.group())
-
-                               
-
-            if 'theme' not in setting:
-
-                setting['theme'] = "The struggle of survival and identity in a unique world."
-
-            if 'dialogue_style_and_tone' not in setting:
-
-                setting['dialogue_style_and_tone'] = "Authentic dialogue style suitable for the setting."
-
-            if 'cinematographic_visual_style' not in setting:
-
-                setting['cinematographic_visual_style'] = "Cinematic framing, atmospheric lighting, and distinct visual motifs."
-
-            if 'key_side_characters' not in setting:
-
+            if 'genre' not in setting:
+                setting['genre'] = "Drama / Adventure"
+            if 'vibes' not in setting:
+                setting['vibes'] = "Atmospheric and engaging."
+            if 'theme_color_associated' not in setting:
+                setting['theme_color_associated'] = ["grey", "blue"]
+            if 'key_side_characters' not in setting or not isinstance(setting['key_side_characters'], list) or len(setting['key_side_characters']) < 3:
                 setting['key_side_characters'] = [
-
-                    {"name": "Local Companion", "default_personality": "Helpful, knowledgeable guide."},
-
-                    {"name": "Local Adversary", "default_personality": "Hostile, suspicious of outsiders."}
-
+                    {"name": "Jackie Welles", "default_personality": "Loyal, ambitious street mercenary.", "relation_to_main": "Partner-in-crime."},
+                    {"name": "Johnny Silverhand", "default_personality": "Charismatic rockerboy rebel.", "relation_to_main": "Internal mental mentor."},
+                    {"name": "Judy Alvarez", "default_personality": "Talented braindance technician.", "relation_to_main": "Technical support advisor."}
                 ]
-
             return setting
-
         else:
-
             raise ValueError("No JSON found")
 
     except Exception as e:
-
         print(f"Error: {e}")
-
         return fallback_story(story_name)
 
 def fallback_story(story_name):
-
-                                                                                   
-
     fallbacks = {
-
         "wuthering heights": {
-
             "story_name": "Wuthering Heights",
-
-            "era": "Victorian era, late 1700s-1800s",
-
-            "location": "Yorkshire moors, England",
-
+            "genre": "Gothic Romance / Tragedy",
             "environment_description": "windswept moors, wild heather, stormy skies, isolated stone manor",
-
-            "mood": "gothic, tragic, passionate, brooding",
-
-            "color_palette": ["dark green", "grey", "brown", "muted purple", "stormy blue"],
-
-            "visual_elements": ["stone walls", "graveyards", "storm clouds", "candles", "old books"],
-
-            "lighting": "dim, candlelit, stormy natural light",
-
-            "weather": "stormy, windy, foggy",
-
-            "theme": "destructive passion, social class barriers, and obsessive cycles of revenge",
-
-            "dialogue_style_and_tone": "Formal, dramatic, poetic, and archaic Victorian dialogue.",
-
-            "cinematographic_visual_style": "High contrast, dark brooding shadows, wide shots of isolated landscapes, low key natural lighting.",
-
+            "theme_color_associated": ["dark green", "grey", "brown", "muted purple", "stormy blue"],
+            "vibes": "brooding, intense, desolate, tragic, and passionate",
             "key_side_characters": [
-
-                {"name": "Heathcliff", "default_personality": "brooding, intense, vengeful, passionate yet cruel"},
-
-                {"name": "Catherine Earnshaw", "default_personality": "spirited, volatile, rebellious, torn between status and love"}
-
+                {"name": "Heathcliff", "default_personality": "brooding, intense, vengeful, passionate yet cruel", "relation_to_main": "Romantic foil and central driver of conflict."},
+                {"name": "Catherine Earnshaw", "default_personality": "spirited, volatile, rebellious, torn between status and love", "relation_to_main": "Main character's love interest and source of emotional obsession."},
+                {"name": "Hindley Earnshaw", "default_personality": "resentful, abusive, self-destructive, grieving brother", "relation_to_main": "Aggressor who drives characters to seek safety or conflict."},
+                {"name": "Nelly Dean", "default_personality": "observant, maternal, gossipy, narrating housemaid", "relation_to_main": "Neutral advisor and keeper of secrets."}
             ]
-
         },
-
         "harry potter": {
-
             "story_name": "Harry Potter",
-
-            "era": "1990s alternate magical",
-
-            "location": "Hogwarts Castle, Scotland",
-
-            "environment_description": "magical castle, moving staircases, forbidden forest, black lake",
-
-            "mood": "magical, mysterious, adventurous",
-
-            "color_palette": ["burgundy", "gold", "forest green", "dark brown"],
-
-            "visual_elements": ["wands", "floating candles", "owls", "cauldrons", "house crests"],
-
-            "lighting": "warm torchlight, magical glow",
-
-            "weather": "variable, sometimes stormy",
-
-            "theme": "the power of love, choice versus destiny, and overcoming darkness",
-
-            "dialogue_style_and_tone": "Modern British English with magical terminology, school slang, and formal tones for authority figures.",
-
-            "cinematographic_visual_style": "Warm, gold and amber tones inside Hogwarts, deep shadows in the forbidden forest, cinematic tracking shots, and magical particles.",
-
+            "genre": "Fantasy / Adventure / Coming-of-Age",
+            "environment_description": "magical castle, moving staircases, forbidden forest, black lake, stone hallways",
+            "theme_color_associated": ["burgundy", "gold", "forest green", "dark brown", "magical silver"],
+            "vibes": "magical, mysterious, adventurous, and warm academic",
             "key_side_characters": [
-
-                {"name": "Hermione Granger", "default_personality": "intellectual, rule-abiding, loyal, highly logical"},
-
-                {"name": "Ron Weasley", "default_personality": "brave, humorous, loyal, occasionally insecure, strategic"}
-
+                {"name": "Hermione Granger", "default_personality": "intellectual, rule-abiding, loyal, highly logical", "relation_to_main": "Intellectual companion who solves magical riddles and supports the main character."},
+                {"name": "Ron Weasley", "default_personality": "brave, humorous, loyal, occasionally insecure, strategic", "relation_to_main": "Best friend and loyal companion who provides tactical wizarding support."},
+                {"name": "Albus Dumbledore", "default_personality": "wise, eccentric, secretive, powerful wizard headmaster", "relation_to_main": "Grand mentor who guides the overarching destiny and mission."},
+                {"name": "Severus Snape", "default_personality": "sarcastic, severe, hidden motives, protective double agent", "relation_to_main": "Antagonistic teacher who forces discipline and growth."}
             ]
-
         },
-
         "cyberpunk": {
-
-            "story_name": "Cyberpunk",
-
-            "era": "dystopian future",
-
-            "location": "Night City, megacity",
-
-            "environment_description": "neon-lit streets, flying cars, holographic ads, constant rain",
-
-            "mood": "gritty, high-energy, dangerous",
-
-            "color_palette": ["neon pink", "cyan", "purple", "black", "yellow"],
-
-            "visual_elements": ["cyberware", "holograms", "drones", "neon signs", "flying cars"],
-
-            "lighting": "neon glow, screen reflections",
-
-            "weather": "constant rain, fog",
-
-            "theme": "dehumanization by megacorporations, high tech low life, survival, and rebellion",
-
-            "dialogue_style_and_tone": "Gritty street slang, cybernetic jargon, cynical one-liners, and formal corporate speak.",
-
-            "cinematographic_visual_style": "High contrast neon-noir lighting, rain-slicked pavement reflections, low-angle tracking shots of skyscrapers, holographic glare, and cybernetic HUD overlays.",
-
+            "story_name": "Cyberpunk 2077",
+            "genre": "Sci-Fi / Cyberpunk / Dystopian Thriller",
+            "environment_description": "neon-lit rain-slicked asphalt streets, colossal dark skyscrapers looming overhead, industrial steam vents, high-tech flying vehicles.",
+            "theme_color_associated": ["neon pink", "cyan", "purple", "black", "yellow"],
+            "vibes": "gritty, high-energy, dangerous, corporate-dominated",
             "key_side_characters": [
-
-                {"name": "Johnny Silverhand", "default_personality": "rebellious, charismatic, cynical, anti-corporate rockerboy"},
-
-                {"name": "Jackie Welles", "default_personality": "loyal, ambitious, warm-hearted, street-smart solo"}
-
+                {"name": "Johnny Silverhand", "default_personality": "rebellious, charismatic, cynical, anti-corporate rockerboy", "relation_to_main": "Anti-corporate mentor and internal foil who pushes the main character to rebel."},
+                {"name": "Jackie Welles", "default_personality": "loyal, ambitious, warm-hearted, street-smart solo", "relation_to_main": "Trusted companion who helps guide the main character through the city's dangerous underworld."},
+                {"name": "Judy Alvarez", "default_personality": "empathetic, rebellious, highly skilled technical brain editor", "relation_to_main": "Technical guide and moral anchor in the city's corruption."},
+                {"name": "Panam Palmer", "default_personality": "independent, fierce, loyal Nomad clan warrior", "relation_to_main": "Outlaw combat companion who provides structural force."}
             ]
-
         }
-
     }
 
     
@@ -298,33 +206,17 @@ def fallback_story(story_name):
 
         "story_name": story_name.title(),
 
-        "era": "fantasy era",
+        "genre": "Fantasy / Adventure",
 
-        "location": "fantasy world",
+        "environment_description": "beautiful landscape with unique features, glowing crystals, ancient ruins",
 
-        "environment_description": "beautiful landscape with unique features",
+        "theme_color_associated": ["emerald green", "golden amber", "deep purple", "silver"],
 
-        "mood": "adventurous and mysterious",
-
-        "color_palette": ["emerald green", "golden amber", "deep purple", "silver"],
-
-        "visual_elements": ["ancient ruins", "magical crystals", "floating islands", "mystical creatures"],
-
-        "lighting": "golden hour, magical glow",
-
-        "weather": "pleasant, occasional mist",
-
-        "theme": "light versus shadow, discovering ancient mysteries",
-
-        "dialogue_style_and_tone": "Formal and archaic fantasy dialogue.",
-
-        "cinematographic_visual_style": "Bright, colorful fantasy lighting, wide scenic landscape shots, and magical glows.",
+        "vibes": "adventurous, mysterious, and magical",
 
         "key_side_characters": [
 
-            {"name": "Elven Guide", "default_personality": "Wise, silent, knows the ancient paths."},
-
-            {"name": "Goblin Thief", "default_personality": "Greedy, mischievous, but easily frightened."}
+            {"name": "Local Companion", "default_personality": "Wise, silent, knows the ancient paths.", "relation_to_main": "Assists and guides the main character."}
 
         ]
 
@@ -376,15 +268,11 @@ print("-" * 50)
 
 print(f"Story: {setting['story_name']}")
 
-print(f"Location: {setting['location']}")
+print(f"Genre: {setting['genre']}")
 
-print(f"Era: {setting['era']}")
+print(f"Vibes: {setting['vibes']}")
 
-print(f"Mood: {setting['mood']}")
-
-print(f"Colors: {', '.join(setting['color_palette'])}")
-
-print(f"Weather: {setting.get('weather', 'varies')}")
+print(f"Colors: {', '.join(setting['theme_color_associated'])}")
 
 print(f"\nEnvironment: {setting['environment_description'][:100]}...")
 
