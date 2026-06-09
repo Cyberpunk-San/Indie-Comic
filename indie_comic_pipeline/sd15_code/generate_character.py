@@ -63,7 +63,8 @@ try:
     pipe = StableDiffusionPipeline.from_pretrained(
         model_name,
         torch_dtype=torch.float16 if device == "cuda" else torch.float32,
-        use_safetensors=True
+        use_safetensors=True,
+        variant="fp16" if device == "cuda" else None
     )
     
     # Load LoRA weights (note: SDXL LoRAs are not directly compatible with SD 1.5)

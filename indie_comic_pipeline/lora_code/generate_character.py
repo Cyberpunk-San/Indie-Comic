@@ -74,16 +74,22 @@ try:
     pipe.load_lora_weights(lora_name)
     
     pipe.scheduler = DPMSolverMultistepScheduler.from_config(pipe.scheduler.config, use_karras_sigmas=True)
-    pipe = pipe.to(device)
-    
     if device == "cuda" and sdxl_settings.get("memory_optimization", True):
         try:
-            pipe.enable_attention_slicing()
-        except Exception as slice_err:
-            print(f"Warning: Could not enable attention slicing: {slice_err}")
+            pipe.enable_model_cpu_offload()
+            print("Model CPU offload enabled (T4 GPU optimized)")
+        except Exception as offload_err:
+            print(f"Warning: Could not enable CPU offload: {offload_err}")
+            pipe = pipe.to(device)
+            try:
+                pipe.enable_attention_slicing()
+            except Exception as slice_err:
+                print(f"Warning: Could not enable attention slicing: {slice_err}")
         pipe.enable_vae_slicing()
         print("GPU memory optimization enabled")
-        
+    else:
+        pipe = pipe.to(device)
+
     print("Model loaded successfully")
     
 except Exception as e:
