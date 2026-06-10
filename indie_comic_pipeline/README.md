@@ -242,13 +242,13 @@ To enforce facial and clothing features stability across all panels, the pipelin
 
 ## 🚀 Execution Guide
 
-### A. End-to-End Orchestrated run
+### A. Local End-to-End Orchestrated Run
 Simply execute the master controller and follow the prompts:
 ```bash
 python run_everything.py
 ```
 
-### B. Manual Step-by-Step execution
+### B. Local Manual Step-by-Step Execution
 1. **Activate Environment:**
    ```bash
    .\venv\Scripts\activate
@@ -271,12 +271,83 @@ python run_everything.py
      python sdxl_code/generate_character.py
      python sdxl_code/generate_panels.py --page 1
      ```
-   * **Stable Diffusion v1.5 + LoRA:**
+   * **Stable Diffusion v1.5:**
      ```bash
      python sd15_code/generate_character.py
      python sd15_code/generate_panels.py --page 1
      ```
-4. **Compare configurations side-by-side:**
+4. **Compare configurations side-by-side (Evaluation Matrix):**
    ```bash
    python matrix_evaluation_zone/model_matrix_bench.py
    ```
+5. **Compile Pages into PDF:**
+   ```bash
+   # Specify the grid layout style to search for (e.g. sdxl_lora_grid, sdxl_base_grid, sd15_lora_grid, doodle_grid)
+   python compile_comic_pdf.py --style sdxl_lora_grid
+   ```
+
+### C. Google Colab Execution (Cloud)
+To run on Google Colab (recommended if you do not have a local high-end NVIDIA GPU), upload the notebook files to [colab.research.google.com](https://colab.research.google.com) and ensure the runtime is set to **T4 GPU** under **Runtime > Change runtime type**.
+
+1. **All-in-One Master Notebook**:
+   * Open and run [indie_comic_pipeline.ipynb](indie_comic_pipeline.ipynb).
+   * It features interactive dropdown menus allowing you to select the setup method (`git` or `zip`) and the model configuration (`1` = SDXL Base, `2` = SD 1.5, `3` = SDXL + LoRA) directly inside the cells.
+2. **Modular Sliced Pipelines**:
+   If you want to run specific pipelines separately, use the following split notebooks:
+   * **crossover_fusion.ipynb**: Runs the LangChain extraction, fuser, and ERC engine.
+   * **metrics_evaluation.ipynb**: Runs the 5-model benchmarking matrix.
+   * **image_generation.ipynb** / **ip_adapter.ipynb**: Runs character and panel image rendering (with or without IP-Adapter stability).
+   * **consistency_checking.ipynb**: Runs the 8-metric mathematical coherence validator.
+   * **comic_strip_generation.ipynb** / **pdf_generation.ipynb**: Assembles layout grids and compiles the PDF book download.
+
+#### 🔄 How to Transfer Data Between Split Notebooks
+Because Google Colab runs each notebook on an isolated, temporary virtual machine runtime, files generated in one notebook (e.g., `storyboard_with_emotions.json` from `crossover_fusion.ipynb`) are **not** automatically visible to a different notebook (e.g., `image_generation.ipynb`).
+
+To share data between them, choose one of these two methods:
+
+* **Method 1: Zip Download & Upload (Standard)**
+  1. At the end of a notebook execution (e.g. `crossover_fusion.ipynb`), run the **Download Outputs** cell to download a consolidated ZIP archive (`indie_comic_outputs.zip`) of all generated JSONs and files.
+  2. Open the next notebook (e.g. `image_generation.ipynb`), and in the **Prepare Environment** setup cell, set `SETUP_MODE = "zip"`.
+  3. Run the cell and upload the ZIP archive you downloaded from the previous step. This extracts the files into the workspace so the script can continue.
+
+* **Method 2: Google Drive Mounting (Persistent Shared Storage)**
+  Instead of downloading/uploading, you can mount your Google Drive to keep files persistent and shared across all notebooks:
+  1. Add a code cell at the beginning of each notebook to mount Google Drive:
+     ```python
+     from google.colab import drive
+     drive.mount('/content/drive')
+     ```
+  2. Create a folder in your Drive (e.g. `drive/MyDrive/indie_comic_pipeline/outputs`) and symlink it to Colab's workspace outputs directory before running:
+     ```python
+     os.makedirs('/content/drive/MyDrive/indie_comic_pipeline/outputs', exist_ok=True)
+     os.symlink('/content/drive/MyDrive/indie_comic_pipeline/outputs', '/content/indie_comic_pipeline/outputs')
+     ```
+  3. Now, all notebooks will read and write to the same shared folder in your Google Drive.
+
+#### 🏁 Step-by-Step Split Notebook Workflow
+To run the entire pipeline while managing the compute load and preventing Google Colab runtime VRAM/timeout crashes, execute the notebooks in this exact chronological order:
+
+```mermaid
+graph TD
+    A[1. crossover_fusion.ipynb] -->|Download / Shared Outputs| B[2. image_generation.ipynb]
+    B -->|Update Outputs| C[3. consistency_checking.ipynb]
+    C -->|Update Outputs| D[4. comic_strip_generation.ipynb]
+    D -->|Update Outputs| E[5. pdf_generation.ipynb]
+```
+
+1. **Step 1: Storyboard & Prompts Synthesis (`crossover_fusion.ipynb`)**
+   * **Purpose**: Spawns Ollama, pulls Llama 3.2, extracts character and setting parameters, and designs the 10-page crossover script and emotion expressions.
+   * **Action**: Run all cells, download the output zip file (`indie_comic_outputs.zip`) at the end, and disconnect the session.
+2. **Step 2: Character & Panel Image Rendering (`image_generation.ipynb`)**
+   * **Purpose**: Loads the heavy Stable Diffusion XL/1.5 models and IP-Adapter weights to render character references and panels.
+   * **Action**: Upload `indie_comic_outputs.zip` in the Setup cell, run the generator cells, download the updated outputs zip, and disconnect.
+3. **Step 3: Character Consistency Verification (`consistency_checking.ipynb`)**
+   * **Purpose**: Compares HSV color histograms, SSIM structure, Gram matrix textures, and CLIP/DINOv2 features to evaluate drawing consistency.
+   * **Action**: Upload the latest outputs zip, execute validation checks, and view results.
+4. **Step 4: Layout Grid Assembly & Doodles (`comic_strip_generation.ipynb`)**
+   * **Purpose**: Compiles individual panel paths into 4-panel layouts and tests layout variations using a lightweight doodle generation.
+   * **Action**: Upload the latest outputs zip, generate layouts, and download the updated zip.
+5. **Step 5: PDF Book Compilation (`pdf_generation.ipynb`)**
+   * **Purpose**: Assembles all page grids into a single, high-quality PDF.
+   * **Action**: Upload the final outputs zip, run the compiler, and download your finished `comic_book_*.pdf`.
+

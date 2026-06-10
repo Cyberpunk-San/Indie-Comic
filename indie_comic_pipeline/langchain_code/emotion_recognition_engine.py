@@ -369,16 +369,40 @@ for page in target_pages:
             char_prompt_parts.append(char_expressions)
         char_prompt_combined = ", ".join(char_prompt_parts)
         
-        # Construct final SDXL prompt
+        # Clean panel_text prefix (e.g. "Panel 1:")
+        clean_panel_text = re.sub(r'^panel\s+\d+:\s*', '', panel_text, flags=re.IGNORECASE).strip()
+        
+        # Construct merged SDXL prompt by pulling tokens from storyboard (crossboard) and ERC (eoc)
+        raw_parts = []
+        raw_parts.extend([p.strip() for p in style_desc.split(",") if p.strip()])
+        raw_parts.extend([p.strip() for p in clean_panel_text.split(",") if p.strip()])
+        if action:
+            raw_parts.extend([p.strip() for p in action.split(",") if p.strip()])
+        raw_parts.extend([p.strip() for p in char_prompt_combined.split(",") if p.strip()])
+        raw_parts.extend([p.strip() for p in env_details.split(",") if p.strip()])
+        
         lighting = setting.get('lighting', 'dramatic noir lighting')
         weather = setting.get('weather', 'foggy overcast')
-        augmented_prompt = f"indie comic style illustration, {style_desc}, {action}, {char_prompt_combined}, in {env_details}, {lighting}, {weather}"
-        # Keep under standard SDXL character limit
-        augmented_prompt = ", ".join([p.strip() for p in augmented_prompt.split(",") if p.strip()])
+        raw_parts.extend([p.strip() for p in lighting.split(",") if p.strip()])
+        raw_parts.extend([p.strip() for p in weather.split(",") if p.strip()])
+        
+        # Case-insensitive deduplication of comma-separated chunks to avoid redundant tokens
+        seen = set()
+        final_parts = []
+        for part in raw_parts:
+            norm_part = re.sub(r'\s+', ' ', part.lower().strip()).rstrip('.')
+            if norm_part and norm_part not in seen:
+                seen.add(norm_part)
+                final_parts.append(part.rstrip('.'))
+                
+        augmented_prompt = ", ".join(final_parts)
         
         panel_emotions["augmented_prompt"] = augmented_prompt
         panel_emotions["panel_text"] = panel_text
         panel_emotions["panel_number"] = idx + 1
+        
+        dialogue_list = page.get("dialogue_and_captions", [])
+        panel_emotions["dialogue_text"] = dialogue_list[idx] if idx < len(dialogue_list) else ""
         
         annotated_panels.append(panel_emotions)
         

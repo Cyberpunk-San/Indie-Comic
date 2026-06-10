@@ -8,7 +8,7 @@ live benchmarking, and multi-metric consistency checking.
 import json
 import os
 
-def build_notebook(git_clone_version=False):
+def build_notebook():
     cells = []
     
     # Title & Introduction
@@ -34,83 +34,64 @@ def build_notebook(git_clone_version=False):
         "source": intro_source
     })
 
-    # Step 1: Repo setup or upload
-    if not git_clone_version:
-        setup_source = [
-            "### Setup Step: Upload Pipeline ZIP\n",
-            "Upload your `indie_comic_pipeline.zip` to the Colab session, unzip it, and set the working directory."
-        ]
-        cells.append({
-            "cell_type": "markdown",
-            "metadata": {},
-            "source": setup_source
-        })
-        
-        setup_code = [
-            "import zipfile\n",
-            "import os\n",
-            "from google.colab import files\n",
-            "\n",
-            "print(\"📤 Upload your indie_comic_pipeline.zip file:\")\n",
-            "uploaded = files.upload()\n",
-            "\n",
-            "for filename in uploaded.keys():\n",
-            "    if filename.endswith('.zip'):\n",
-            "        with zipfile.ZipFile(filename, 'r') as zip_ref:\n",
-            "            zip_ref.extractall('/content/')\n",
-            "        print(f\"✅ Unzipped: {filename}\")\n",
-            "        break\n",
-            "\n",
-            "%cd /content/indie_comic_pipeline\n",
-            "print(f\"📂 Current working directory: {os.getcwd()}\")"
-        ]
-        cells.append({
-            "cell_type": "code",
-            "execution_count": None,
-            "metadata": {},
-            "outputs": [],
-            "source": setup_code
-        })
-    else:
-        setup_source = [
-            "### Setup Step: Clone Repository\n",
-            "Clone the pipeline repository from GitHub, enter the sub-directory, and set up the output folders."
-        ]
-        cells.append({
-            "cell_type": "markdown",
-            "metadata": {},
-            "source": setup_source
-        })
-        
-        setup_code = [
-            "import os, subprocess\n",
-            "\n",
-            "REPO_URL   = \"https://github.com/Cyberpunk-San/Indie-Comic.git\"\n",
-            "REPO_DIR   = \"/content/indie_comic_pipeline\"\n",
-            "SUBDIR     = \"indie_comic_pipeline\"\n",
-            "\n",
-            "if not os.path.exists(REPO_DIR):\n",
-            "    print(f\"📥 Cloning repo from {REPO_URL}...\")\n",
-            "    subprocess.run([\"git\", \"clone\", \"--depth\", \"1\", REPO_URL, REPO_DIR], check=True)\n",
-            "else:\n",
-            "    print(\"✅ Repository already present — pulling latest changes...\")\n",
-            "    subprocess.run([\"git\", \"-C\", REPO_DIR, \"pull\"], check=True)\n",
-            "\n",
-            "PIPELINE_ROOT = os.path.join(REPO_DIR, SUBDIR)\n",
-            "os.chdir(PIPELINE_ROOT)\n",
-            "print(f\"📂 Working directory set to: {os.getcwd()}\")\n",
-            "\n",
-            "for d in [\"outputs/fusion\", \"outputs/comics\", \"outputs/characters\"]:\n",
-            "    os.makedirs(d, exist_ok=True)\n",
-            "print(\"✅ Directory structure ready.\")"
-        ]
-        cells.append({
-            "cell_type": "code",
-            "execution_count": None,
-            "metadata": {},
-            "outputs": [],
-            "source": setup_code
-        })
+    # Combined Setup Step: Repo setup or zip upload
+    setup_source = [
+        "### Setup Step: Prepare Environment\n",
+        "Select your setup mode to either **Clone Repository** directly from GitHub (recommended) or **Upload ZIP** archive."
+    ]
+    cells.append({
+        "cell_type": "markdown",
+        "metadata": {},
+        "source": setup_source
+    })
+    
+    setup_code = [
+        "#@title Choose Setup Method { run: \"auto\" }\n",
+        "SETUP_MODE = \"git\" #@param [\"git\", \"zip\"]\n",
+        "\n",
+        "import os, subprocess, zipfile\n",
+        "from google.colab import files\n",
+        "\n",
+        "if SETUP_MODE == \"git\":\n",
+        "    REPO_URL   = \"https://github.com/Cyberpunk-San/Indie-Comic.git\"\n",
+        "    REPO_DIR   = \"/content/indie_comic_pipeline\"\n",
+        "    SUBDIR     = \"indie_comic_pipeline\"\n",
+        "\n",
+        "    if not os.path.exists(REPO_DIR):\n",
+        "        print(f\"📥 Cloning repo from {REPO_URL}...\")\n",
+        "        subprocess.run([\"git\", \"clone\", \"--depth\", \"1\", REPO_URL, REPO_DIR], check=True)\n",
+        "    else:\n",
+        "        print(\"✅ Repository already present — pulling latest changes...\")\n",
+        "        subprocess.run([\"git\", \"-C\", REPO_DIR, \"pull\"], check=True)\n",
+        "\n",
+        "    PIPELINE_ROOT = os.path.join(REPO_DIR, SUBDIR)\n",
+        "    os.chdir(PIPELINE_ROOT)\n",
+        "    print(f\"📂 Working directory set to: {os.getcwd()}\")\n",
+        "\n",
+        "    for d in [\"outputs/fusion\", \"outputs/comics\", \"outputs/characters\"]:\n",
+        "        os.makedirs(d, exist_ok=True)\n",
+        "    print(\"✅ Directory structure ready.\")\n",
+        "else:\n",
+        "    print(\"📤 Upload your indie_comic_pipeline.zip file:\")\n",
+        "    uploaded = files.upload()\n",
+        "\n",
+        "    for filename in uploaded.keys():\n",
+        "        if filename.endswith('.zip'):\n",
+        "            with zipfile.ZipFile(filename, 'r') as zip_ref:\n",
+        "                zip_ref.extractall('/content/')\n",
+        "            print(f\"✅ Unzipped: {filename}\")\n",
+        "            break\n",
+        "\n",
+        "    %cd /content/indie_comic_pipeline\n",
+        "    print(f\"📂 Current working directory: {os.getcwd()}\")"
+    ]
+    cells.append({
+        "cell_type": "code",
+        "execution_count": None,
+        "metadata": {},
+        "outputs": [],
+        "source": setup_code
+    })
 
     # Self-Healing Hotfixes cell
     cells.append({
@@ -373,8 +354,10 @@ def build_notebook(git_clone_version=False):
             "    print(\"\\n--- 🎬 4 Panels Breakdown & Prompts ---\")\n",
             "    for pd in target.get('panels_detail', []):\n",
             "        print(f\"  Panel {pd.get('panel_number')}:\")\n",
+            "        print(f\"    Storyboard Prompt: {pd.get('panel_text')}\")\n",
+            "        print(f\"    Dialogue & Captions: {pd.get('dialogue_text')}\")\n",
             "        print(f\"    Actions: {pd.get('core_action')}\")\n",
-            "        print(f\"    Synthesized prompt: {pd.get('augmented_prompt')}\")\n",
+            "        print(f\"    Synthesized Prompt (Merged): {pd.get('augmented_prompt')}\")\n",
             "        for c, emo in pd.get('emotions', {}).items():\n",
             "            print(f\"      * {c}: emotion={emo.get('emotion')} | expression_trigger={emo.get('expression_trigger')}\")\n",
             "        print(\"-\" * 40)\n",
@@ -1034,21 +1017,92 @@ def remove_emojis_from_obj(obj):
         return clean_str_emojis(obj)
     return obj
 
-# Programmatically build both notebooks
+# Programmatically build the consolidated master notebook
 script_dir = os.path.dirname(os.path.abspath(__file__))
 
-# 1. indie_comic_pipeline.ipynb (ZIP Upload edition)
-notebook_pipeline = build_notebook(git_clone_version=False)
+# 1. indie_comic_pipeline.ipynb (Consolidated master edition)
+notebook_pipeline = build_notebook()
 notebook_pipeline = remove_emojis_from_obj(notebook_pipeline)
 pipeline_path = os.path.join(script_dir, "indie_comic_pipeline.ipynb")
 with open(pipeline_path, "w", encoding="utf-8") as f:
     json.dump(notebook_pipeline, f, indent=2)
-print(f"Created Colab Notebook: {pipeline_path}")
+print(f"Created Consolidated Colab Notebook: {pipeline_path}")
 
-# 2. indie_comic_colab_full.ipynb (Git Clone auto edition)
-notebook_full = build_notebook(git_clone_version=True)
-notebook_full = remove_emojis_from_obj(notebook_full)
-full_path = os.path.join(script_dir, "indie_comic_colab_full.ipynb")
-with open(full_path, "w", encoding="utf-8") as f:
-    json.dump(notebook_full, f, indent=2)
-print(f"Created Colab Notebook: {full_path}")
+# 2. Create separate notebooks for different pipelines
+def generate_pipeline_notebooks(notebook_master):
+    split_notebooks = {
+        "crossover_fusion.ipynb": {
+            "title": "# 🎨 Storyboard Crossover Fusion Pipeline — Google Colab Edition\n\nA notebook focused on LangChain story and character extraction, setting parameter styling, and Crossover Fusion & Emotion Recognition (ERC) storyboard generation.\n\n⚠️ **Runtime Requirement**: Select **T4 GPU** (or any GPU) to execute.",
+            "indices": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 45, 46]
+        },
+        "metrics_evaluation.ipynb": {
+            "title": "# 📊 Multi-Model Benchmarking & Evaluation Matrix — Google Colab Edition\n\nEvaluate all 5 Stable Diffusion model configurations on 5 performance and quality metrics (CLIP, FID, Speed, VRAM, and Edge Density) side-by-side on a live prompt.\n\n⚠️ **Runtime Requirement**: Select **T4 GPU** (or any GPU) to execute.",
+            "indices": [1, 2, 3, 4, 5, 6, 9, 10, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 45, 46]
+        },
+        "image_generation.ipynb": {
+            "title": "# 🖼️ Comic Character & Panel Generation Pipeline — Google Colab Edition\n\nGenerate high-quality character reference sheets, visual components, and individual comic panels, compile layout grids, and visualize outcomes using SDXL, SD 1.5, and LoRA.\n\n⚠️ **Runtime Requirement**: Select **T4 GPU** (or any GPU) to execute.",
+            "indices": [1, 2, 3, 4, 5, 6, 9, 10, 31, 32, 35, 36, 37, 38, 45, 46]
+        },
+        "consistency_checking.ipynb": {
+            "title": "# 🔍 Advanced Multi-Metric Character Consistency Pipeline — Google Colab Edition\n\nVerify visual and semantic character consistency across generated assets and panels using HSV color correlation, SSIM, Canny Edge, Style Gram, CLIP, DINOv2, and aesthetic scoring.\n\n⚠️ **Runtime Requirement**: Select **T4 GPU** (or any GPU) to execute.",
+            "indices": [1, 2, 3, 4, 5, 6, 9, 10, 33, 34, 39, 40, 45, 46]
+        },
+        "comic_strip_generation.ipynb": {
+            "title": "# ✏️ Comic Layout & Doodle Storyboard Pipeline — Google Colab Edition\n\nAssemble panel layouts, generate doodle storyboards, compile horizontal and grid comic layout sheets, and bundle them into PDFs.\n\n⚠️ **Runtime Requirement**: Select **T4 GPU** (or any GPU) to execute.",
+            "indices": [1, 2, 3, 4, 5, 6, 9, 10, 41, 42, 43, 44, 45, 46]
+        },
+        "ip_adapter.ipynb": {
+            "title": "# 👤 IP-Adapter Feature Consistency Pipeline — Google Colab Edition\n\nMaintain character facial features and clothing styles stable across panels by loading IP-Adapter models (FaceID-PlusV2 / standard SDXL IP-Adapter / SD1.5 IP-Adapter) and conditioning panel rendering on the character reference anchor sheet.\n\n⚠️ **Runtime Requirement**: Select **T4 GPU** (or any GPU) to execute.",
+            "indices": [1, 2, 3, 4, 5, 6, 9, 10, 31, 32, 35, 36, 37, 38, 45, 46]
+        },
+        "pdf_generation.ipynb": {
+            "title": "# 📄 Comic PDF Book Compilation Pipeline — Google Colab Edition\n\nCompile all generated comic page layouts and panel grid sheets into a single, high-quality PDF book and trigger the browser download.\n\n⚠️ **Runtime Requirement**: Select **T4 GPU** (or any GPU) to execute.",
+            "indices": [1, 2, 3, 4, 5, 6, 9, 10, 43, 44, 45, 46]
+        }
+    }
+
+    full_cells = notebook_master["cells"]
+    for nb_name, config in split_notebooks.items():
+        split_cells = []
+        
+        # Add custom title markdown cell
+        split_cells.append({
+            "cell_type": "markdown",
+            "metadata": {},
+            "source": [config["title"] + "\n"]
+        })
+        
+        # Sliced cells from full notebook
+        for idx in config["indices"]:
+            if idx < len(full_cells):
+                split_cells.append(json.loads(json.dumps(full_cells[idx])))
+                
+        split_nb = {
+            "cells": split_cells,
+            "metadata": {
+                "colab": {
+                    "provenance": [],
+                    "gpuType": "T4",
+                    "name": nb_name.replace(".ipynb", "").replace("_", " ").title()
+                },
+                "kernelspec": {
+                    "name": "python3",
+                    "display_name": "Python 3"
+                },
+                "language_info": {
+                    "name": "python"
+                },
+                "accelerator": "GPU"
+            },
+            "nbformat": 4,
+            "nbformat_minor": 2
+        }
+        
+        split_nb = remove_emojis_from_obj(split_nb)
+        
+        nb_path = os.path.join(script_dir, nb_name)
+        with open(nb_path, "w", encoding="utf-8") as f:
+            json.dump(split_nb, f, indent=2)
+        print(f"Created Split Colab Notebook: {nb_path}")
+
+generate_pipeline_notebooks(notebook_pipeline)

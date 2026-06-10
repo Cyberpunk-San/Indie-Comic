@@ -9,7 +9,7 @@ from PIL import Image
 import re
 import argparse
 
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from utils.config_helper import load_settings, get_output_path
 
 def compile_pdf(layout_style='sdxl_lora_grid'):
