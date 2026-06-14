@@ -120,6 +120,85 @@ if "llama3.2" not in result.stdout:
 print("Llama 3.2 is available.")
 
 # ============================================================================
+# QUALITY & CONSISTENCY SELECTION
+# ============================================================================
+
+print("\n" + "=" * 70)
+print("QUALITY & CONSISTENCY SELECTION")
+print("=" * 70)
+print("Enable Extreme Quality & High Consistency Mode?")
+print("  - Renders at 896x896 resolution, 40 steps")
+print("  - Enables IP-Adapter for strong character visual lock-in")
+print("  - Activates CLIP + DINOv2 neural metrics for strict 0.75+ consistency checks")
+eq_input = input("\nEnable Extreme Quality Mode? (y/n, default is n): ").strip().lower()
+USING_EXTREME_QUALITY = (eq_input == "y")
+
+if USING_EXTREME_QUALITY:
+    print("\nApplying Extreme Quality & High Consistency configurations...")
+    try:
+        import yaml
+        
+        # Load existing settings
+        settings_path = os.path.join(PIPELINE_ROOT, "config", "settings.yaml")
+        with open(settings_path, "r", encoding="utf-8") as f:
+            settings = yaml.safe_load(f)
+            
+        # Modify for Extreme Quality
+        settings['generation']['default_size']['width'] = 896
+        settings['generation']['default_size']['height'] = 896
+        settings['generation']['inference_steps'] = 40
+        settings['t4_optimizations']['disable_ipadapter'] = False
+        settings['models']['ipadapter'] = settings.get('models', {}).get('ipadapter', {})
+        settings['models']['ipadapter']['enabled'] = True
+        
+        # Enable all consistency checks
+        settings['consistency'] = settings.get('consistency', {})
+        settings['consistency']['enable_clip'] = True
+        settings['consistency']['enable_dinov2'] = True
+        settings['consistency']['enable_ssim'] = True
+        settings['consistency']['enable_edge'] = True
+        settings['consistency']['enable_style'] = True
+        settings['consistency']['enable_color'] = True
+        settings['consistency']['threshold'] = 0.75
+        
+        # Write back settings
+        with open(settings_path, "w", encoding="utf-8") as f:
+            yaml.safe_dump(settings, f)
+        print("✅ settings.yaml successfully updated for Extreme Quality Mode.")
+    except Exception as e:
+        print(f"⚠️ Warning: Failed to update settings.yaml: {e}")
+else:
+    # Reset/restore T4 optimized draft settings if not enabled
+    print("\nApplying Standard T4 Optimized configurations...")
+    try:
+        import yaml
+        settings_path = os.path.join(PIPELINE_ROOT, "config", "settings.yaml")
+        with open(settings_path, "r", encoding="utf-8") as f:
+            settings = yaml.safe_load(f)
+            
+        settings['generation']['default_size']['width'] = 768
+        settings['generation']['default_size']['height'] = 768
+        settings['generation']['inference_steps'] = 25
+        settings['t4_optimizations']['disable_ipadapter'] = True
+        settings['models']['ipadapter'] = settings.get('models', {}).get('ipadapter', {})
+        settings['models']['ipadapter']['enabled'] = False
+        
+        settings['consistency'] = settings.get('consistency', {})
+        settings['consistency']['enable_clip'] = False
+        settings['consistency']['enable_dinov2'] = False
+        settings['consistency']['enable_ssim'] = True
+        settings['consistency']['enable_edge'] = True
+        settings['consistency']['enable_style'] = True
+        settings['consistency']['enable_color'] = False
+        settings['consistency']['threshold'] = 0.55
+        
+        with open(settings_path, "w", encoding="utf-8") as f:
+            yaml.safe_dump(settings, f)
+        print("✅ settings.yaml restored to Standard T4 Optimized Mode.")
+    except Exception as e:
+        print(f"⚠️ Warning: Failed to reset settings.yaml: {e}")
+
+# ============================================================================
 # MODE SELECTION: Story-Weaver Direct vs LangChain Extraction
 # ============================================================================
 
@@ -154,9 +233,9 @@ if USING_STORY_WEAVER_MODE:
     if not sw_world:
         sw_world = "The Abstract"
 
-    sw_min_chars = input("Minimum side characters per panel [default: 3]: ").strip()
+    sw_min_chars = input("Minimum side characters per panel [default: 2]: ").strip()
     if not sw_min_chars or not sw_min_chars.isdigit():
-        sw_min_chars = "3"
+        sw_min_chars = "2"
 
     print("\n" + "=" * 70)
     print("STEP 1: Running Story-Weaver Enricher")
@@ -227,21 +306,34 @@ choice = input("Enter choice [1, 2, or 3, default is 1]: ").strip()
 if not choice:
     choice = "1"
 
-# FIX: Add page range selection for legacy mode
-if not USING_STORY_WEAVER_MODE:
-    print("\nGenerate character sheet reference and component assets first? (y/n, default is y): ", end="")
-    gen_assets = input().strip().lower()
-    if gen_assets != 'n':
-        print("\nExecuting Component Assets Generation...")
+# In Extreme Quality mode, we must generate character sheet reference even in Story-Weaver mode
+if not USING_STORY_WEAVER_MODE or USING_EXTREME_QUALITY:
+    if USING_STORY_WEAVER_MODE:
+        print("\n[Extreme Quality Mode] Pre-generating character reference profile for IP-Adapter...")
+        # In Story-Weaver mode, we generate the reference character sheet
         if choice == '2':
-            result = run_script("sd15_code/run_sd15_pipeline.py")
+            script = "sd15_code/generate_character.py"
         elif choice == '3':
-            result = run_script("lora_code/run_lora_pipeline.py")
+            script = "lora_code/generate_character.py"
         else:
-            result = run_script("sdxl_code/run_sdxl_pipeline.py")
-        
+            script = "sdxl_code/generate_character.py"
+        result = run_script(script)
         if result is None or result.returncode != 0:
-            print("Warning: Asset generation had issues, but continuing...")
+            print("Warning: Character reference generation had issues, but continuing...")
+    else:
+        print("\nGenerate character sheet reference and component assets first? (y/n, default is y): ", end="")
+        gen_assets = input().strip().lower()
+        if gen_assets != 'n':
+            print("\nExecuting Component Assets Generation...")
+            if choice == '2':
+                result = run_script("sd15_code/run_sd15_pipeline.py")
+            elif choice == '3':
+                result = run_script("lora_code/run_lora_pipeline.py")
+            else:
+                result = run_script("sdxl_code/run_sdxl_pipeline.py")
+            
+            if result is None or result.returncode != 0:
+                print("Warning: Asset generation had issues, but continuing...")
 else:
     print("\n[Story-Weaver Mode] Skipping character sheet generation — not required.")
 

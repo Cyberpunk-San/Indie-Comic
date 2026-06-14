@@ -184,8 +184,8 @@ if __name__ == "__main__":
                         help="Name of the story setting")
     parser.add_argument("--enrich", action="store_true",
                         help="Use enriched mode: LLM builds full cast + prompts, no reference image needed")
-    parser.add_argument("--min-side-chars", type=int, default=3,
-                        help="Minimum side characters per panel in enriched mode (default: 3)")
+    parser.add_argument("--min-side-chars", type=int, default=2,
+                        help="Minimum side characters per panel in enriched mode (default: 2)")
 
     args = parser.parse_args()
 

@@ -68,7 +68,7 @@ parser.add_argument(
     "--min-side-chars",
     type=int,
     default=None,
-    help="Minimum number of side characters per panel (default: from settings or 3)"
+    help="Minimum number of side characters per panel (default: from settings or 2)"
 )
 args = parser.parse_args()
 
@@ -84,7 +84,7 @@ sw_settings = settings.get("story_weaver", {})
 input_path = args.input or sw_settings.get("input_path", "../Story-Weaver/story_dynamic.json")
 character_name = args.character or sw_settings.get("character_name", "Wanderer")
 story_world = args.world or sw_settings.get("story_world", "The Abstract")
-min_side_chars = args.min_side_chars or sw_settings.get("min_side_characters", 3)
+min_side_chars = args.min_side_chars or sw_settings.get("min_side_characters", 2)
 
 # ---------------------------------------------------------------------------
 # JSON Repair Utility (handles LLM truncated outputs)

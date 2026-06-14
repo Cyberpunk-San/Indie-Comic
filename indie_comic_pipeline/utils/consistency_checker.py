@@ -143,13 +143,15 @@ class ConsistencyChecker:
             return None
             
         # Load once globally, reuse forever
-        if _CLIP_MODEL is None:
+        self.device = "cuda"
+        if _CLIP_MODEL is None or _CLIP_PROCESSOR is None:
             from transformers import CLIPProcessor, CLIPModel
             print("  [i] Loading CLIP model (once, cached)...")
-            self.device = "cuda"
             _CLIP_MODEL = CLIPModel.from_pretrained("openai/clip-vit-base-patch32").to(self.device)
             _CLIP_PROCESSOR = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
             print("  [✓] CLIP model loaded and cached")
+        else:
+            _CLIP_MODEL = _CLIP_MODEL.to(self.device)
             
         img1 = Image.open(img1_path)
         img2 = Image.open(img2_path)
@@ -163,6 +165,13 @@ class ConsistencyChecker:
         
         # Cosine similarity
         similarity = torch.nn.functional.cosine_similarity(features[0:1], features[1:2]).item()
+        
+        # Offload to CPU and clear CUDA cache to save VRAM
+        _CLIP_MODEL = _CLIP_MODEL.to("cpu")
+        import gc
+        gc.collect()
+        torch.cuda.empty_cache()
+        
         return max(0.0, min(1.0, similarity))
 
     def compute_dinov2_similarity(self, img1_path, img2_path):
@@ -178,13 +187,15 @@ class ConsistencyChecker:
             return None
             
         # Load once globally, reuse forever
-        if _DINOV2_MODEL is None:
+        self.device = "cuda"
+        if _DINOV2_MODEL is None or _DINOV2_PROCESSOR is None:
             from transformers import AutoImageProcessor, AutoModel
             print("  [i] Loading DINOv2 model (once, cached)...")
-            self.device = "cuda"
             _DINOV2_PROCESSOR = AutoImageProcessor.from_pretrained("facebook/dinov2-base")
             _DINOV2_MODEL = AutoModel.from_pretrained("facebook/dinov2-base").to(self.device)
             print("  [✓] DINOv2 model loaded and cached")
+        else:
+            _DINOV2_MODEL = _DINOV2_MODEL.to(self.device)
             
         img1 = Image.open(img1_path).convert("RGB")
         img2 = Image.open(img2_path).convert("RGB")
@@ -206,6 +217,12 @@ class ConsistencyChecker:
             
             similarity = torch.nn.functional.cosine_similarity(features1, features2).item()
             
+        # Offload to CPU and clear CUDA cache to save VRAM
+        _DINOV2_MODEL = _DINOV2_MODEL.to("cpu")
+        import gc
+        gc.collect()
+        torch.cuda.empty_cache()
+        
         return max(0.0, min(1.0, similarity))
 
     def extract_features(self, image_path):

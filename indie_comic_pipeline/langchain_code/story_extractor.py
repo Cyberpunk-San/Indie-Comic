@@ -107,7 +107,7 @@ def extract_story_setting(story_name):
             ]
         }}
         
-        CRITICAL REQUIREMENT: You MUST extract between 3 and 6 key side characters from the target story world. Define their name, default personality, and how they would relate to the main character in this crossover.
+        CRITICAL REQUIREMENT: You MUST extract between 2 and 6 key side characters from the target story world. Define their name, default personality, and how they would relate to the main character in this crossover.
         
         Respond ONLY with valid JSON matching the exact schema above. No other text before or after:
         """),
@@ -129,7 +129,7 @@ def extract_story_setting(story_name):
                 setting['vibes'] = "Atmospheric and engaging."
             if 'theme_color_associated' not in setting:
                 setting['theme_color_associated'] = ["grey", "blue"]
-            if 'key_side_characters' not in setting or not isinstance(setting['key_side_characters'], list) or len(setting['key_side_characters']) < 3:
+            if 'key_side_characters' not in setting or not isinstance(setting['key_side_characters'], list) or len(setting['key_side_characters']) < 2:
                 setting['key_side_characters'] = [
                     {"name": "Jackie Welles", "default_personality": "Loyal, ambitious street mercenary.", "relation_to_main": "Partner-in-crime."},
                     {"name": "Johnny Silverhand", "default_personality": "Charismatic rockerboy rebel.", "relation_to_main": "Internal mental mentor."},
@@ -211,9 +211,8 @@ def fallback_story(story_name):
         "vibes": "adventurous, mysterious, and magical",
 
         "key_side_characters": [
-
-            {"name": "Local Companion", "default_personality": "Wise, silent, knows the ancient paths.", "relation_to_main": "Assists and guides the main character."}
-
+            {"name": "Local Companion", "default_personality": "Wise, silent, knows the ancient paths.", "relation_to_main": "Assists and guides the main character."},
+            {"name": "Sage Mentor", "default_personality": "Elderly guardian of the realm, possesses deep knowledge.", "relation_to_main": "Mentors and advises the main character."}
         ]
 
     }

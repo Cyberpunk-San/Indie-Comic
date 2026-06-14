@@ -272,8 +272,8 @@ ref_path = get_output_path(char_dir, "character_reference.png")
 use_ip_adapter = False
 ip_adapter_enabled = t4_opts.get("disable_ipadapter", True) == False
 
-if USING_ENRICHED_MODE:
-    print("[+] Enriched mode: skipping IP-Adapter (no reference image needed).")
+if USING_ENRICHED_MODE and not os.path.exists(ref_path):
+    print("[+] Enriched mode: reference character image not found, skipping IP-Adapter.")
 elif not ip_adapter_enabled:
     print("[i] IP-Adapter disabled in T4 optimizations (saves VRAM).")
 elif os.path.exists(ref_path):
@@ -282,13 +282,10 @@ elif os.path.exists(ref_path):
         ip_settings = settings.get("models", {}).get("ipadapter", {})
         ip_weight = ip_settings.get("weight", 0.8)
         
-        if ip_adapter_enabled:
-            pipe.load_ip_adapter("h94/IP-Adapter", subfolder="sdxl_models", weight_name="ip-adapter_sdxl.bin")
-            pipe.set_ip_adapter_scale(ip_weight)
-            print("IP-Adapter loaded successfully!")
-            use_ip_adapter = True
-        else:
-            print("IP-Adapter disabled for T4 optimization")
+        pipe.load_ip_adapter("h94/IP-Adapter", subfolder="sdxl_models", weight_name="ip-adapter_sdxl.bin")
+        pipe.set_ip_adapter_scale(ip_weight)
+        print("IP-Adapter loaded successfully!")
+        use_ip_adapter = True
     except Exception as e:
         print(f"Warning: Failed to load IP-Adapter: {e}")
 else:
