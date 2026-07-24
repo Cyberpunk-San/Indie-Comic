@@ -165,7 +165,20 @@ class ReferenceFreeAnchor:
         log.info(f"  [Step 2.3] Identity Embedding Extraction complete")
 
         # Step 2.4: Inject tokens back into memory
-        memory.set_anchor(panel_id, identity_tokens)
+        # Track the first generated anchor panel as the global primary anchor
+        if memory.anchor_panel_id is None or panel_id == 1:
+            memory.set_anchor(panel_id, identity_tokens)
+        else:
+            log.info(f"  [Step 2.4] Secondary anchor panel {panel_id} recorded for character '{character_name}'")
+
+        # Track character-level anchor metadata and identity tokens
+        memory.record_character_anchor(
+            canonical_name=character_name,
+            panel_id=panel_id,
+            tokens=identity_tokens,
+            anchor_path=anchor_path,
+            signature_path=identity_tokens.get("mdcp_signature_path")
+        )
         memory.inject_identity_tokens(character_name, identity_tokens)
         log.info(f"  [Step 2.4] Identity tokens injected into Story Section Memory")
 

@@ -1,4 +1,5 @@
 import os
+import json
 import zipfile
 import logging
 from typing import Optional, List
@@ -183,6 +184,20 @@ class ComicExporter:
                     return output_path
             except Exception as e_pil:
                 log.error(f"Failed to export PDF with PIL fallback: {e_pil}")
+            return None
+
+    def export_reproducibility_metadata(self, metadata: dict, title: str = "comic_metadata") -> Optional[str]:
+        """Export reproducibility metadata as JSON for audit and reruns."""
+        safe_title = "".join([c for c in title if c.isalpha() or c.isdigit() or c == ' ']).rstrip()
+        safe_title = safe_title.replace(" ", "_")
+        output_path = os.path.join(self.output_dir, f"{safe_title}_reproducibility.json")
+        try:
+            with open(output_path, "w", encoding="utf-8") as f:
+                json.dump(metadata, f, indent=2)
+            log.info(f"Successfully exported reproducibility metadata: {output_path}")
+            return output_path
+        except Exception as e:
+            log.error(f"Failed to export reproducibility metadata: {e}")
             return None
 
     def export_web_comic(self, pages: list, output_path: str = "outputs/exports/web_comic.html"):

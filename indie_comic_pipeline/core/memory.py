@@ -176,6 +176,8 @@ class StorySectionMemory(BlackboardValidatorMixin):
     total_pages: int
     anchor_panel_id: Optional[int]
     anchor_features: Optional[Dict[str, Any]]
+    character_registry: Dict[str, Dict[str, Any]]
+    introduction_panel_map: Dict[str, int]
     retention_window: int
 
     def __init__(self, retention_window: int = 20):
@@ -202,6 +204,8 @@ class StorySectionMemory(BlackboardValidatorMixin):
         # ── Identity Anchor ──
         self.anchor_panel_id = None
         self.anchor_features = None
+        self.character_registry = {}
+        self.introduction_panel_map = {}
 
         # ── Configuration ──
         self.retention_window = retention_window
@@ -214,20 +218,125 @@ class StorySectionMemory(BlackboardValidatorMixin):
     # Character Management
     # ─────────────────────────────────────────────────────────────────────
 
-    def register_character(self, name: str, **kwargs) -> CharacterState:
-        """Register or update a character in the blackboard."""
+    def _normalize_character_id(self, name: str) -> str:
+        """Normalize character identifiers to a canonical registry key."""
+        if not name or not isinstance(name, str):
+            return ""
+        return name.strip().lower()
+
+    def _ensure_character_registry_entry(self, canonical_name: str, aliases=None) -> Dict[str, Any]:
+        canonical_key = self._normalize_character_id(canonical_name)
+        if canonical_key not in self.character_registry:
+            self.character_registry[canonical_key] = {
+                "canonical_name": canonical_name,
+                "aliases": [],
+                "scene_ids": [],
+                "intro_panel": None,
+                "anchor_image_path": None,
+                "anchor_signature_path": None,
+                "identity_tokens": None,
+            }
+        if aliases:
+            for alias in aliases:
+                alias_key = self._normalize_character_id(alias)
+                if alias_key and alias not in self.character_registry[canonical_key]["aliases"]:
+                    self.character_registry[canonical_key]["aliases"].append(alias)
+        return self.character_registry[canonical_key]
+
+    def register_character(self, name: str, canonical_name: Optional[str] = None,
+                           aliases: Optional[List[str]] = None, **kwargs) -> CharacterState:
+        """Register or update a character in the blackboard and registry."""
+        if not name:
+            raise ValueError("Character name must be a non-empty string.")
+
+        canonical = canonical_name or name
+        self._ensure_character_registry_entry(canonical, aliases=[name, canonical] + (aliases or []))
+
         if name not in self.characters:
-            self.characters[name] = CharacterState(name=name, **kwargs)
+            self.characters[name] = CharacterState(name=canonical, **kwargs)
         else:
             for k, v in kwargs.items():
                 if hasattr(self.characters[name], k):
                     setattr(self.characters[name], k, v)
-        self._touch()
         return self.characters[name]
+
+    def get_registered_character_names(self) -> List[str]:
+        return [entry["canonical_name"] for entry in self.character_registry.values()]
 
     def get_character(self, name: str) -> Optional[CharacterState]:
         """Get a character's current state."""
         return self.characters.get(name)
+
+    def get_canonical_character(self, name: str) -> Optional[Dict[str, Any]]:
+        """Get canonical registry entry for an alias or name."""
+        key = self._normalize_character_id(name)
+        for reg_key, info in self.character_registry.items():
+            alias_keys = [self._normalize_character_id(alias) for alias in info.get("aliases", [])]
+            if key == reg_key or key in alias_keys:
+                return info
+        return None
+
+    def get_canonical_name(self, name: str) -> Optional[str]:
+        """Resolve an alias to its canonical name."""
+        entry = self.get_canonical_character(name)
+        return entry["canonical_name"] if entry else None
+
+    def add_character_alias(self, canonical_name: str, alias: str):
+        """Register an alias for a canonical character."""
+        entry = self._ensure_character_registry_entry(canonical_name, aliases=[alias])
+        if alias not in entry["aliases"]:
+            entry["aliases"].append(alias)
+        self._touch()
+
+    def record_character_scene_id(self, canonical_name: str, scene_id: str):
+        """Record a scene graph id for a canonical character."""
+        entry = self._ensure_character_registry_entry(canonical_name)
+        if scene_id and scene_id not in entry["scene_ids"]:
+            entry["scene_ids"].append(scene_id)
+        self._touch()
+
+    def set_intro_panel(self, canonical_name: str, panel_id: int):
+        """Record the earliest introduction panel for a canonical character."""
+        entry = self._ensure_character_registry_entry(canonical_name)
+        existing = entry.get("intro_panel")
+        if existing is None or (isinstance(existing, int) and panel_id < existing):
+            entry["intro_panel"] = panel_id
+            self.introduction_panel_map[self._normalize_character_id(canonical_name)] = panel_id
+        self._touch()
+
+    def record_character_anchor(self, canonical_name: str, panel_id: int,
+                                tokens: Dict[str, Any], anchor_path: str,
+                                signature_path: Optional[str] = None):
+        """Record a character-specific anchor, tokens, and metadata."""
+        entry = self._ensure_character_registry_entry(canonical_name)
+        existing = entry.get("intro_panel")
+        if existing is None or (isinstance(existing, int) and panel_id < existing):
+            entry["intro_panel"] = panel_id
+            self.introduction_panel_map[self._normalize_character_id(canonical_name)] = panel_id
+        entry["anchor_image_path"] = anchor_path
+        if signature_path:
+            entry["anchor_signature_path"] = signature_path
+        entry["identity_tokens"] = tokens
+        self._touch()
+
+    def build_introduction_panel_map(self):
+        """Compute intro panels from raw panel data and registry aliases."""
+        if not self.raw_panels:
+            return
+        for panel in self.raw_panels:
+            panel_id = panel.get("panel") or panel.get("panel_id")
+            if not isinstance(panel_id, int):
+                continue
+            for char_obj in panel.get("characters", []):
+                char_id = char_obj.get("id") or char_obj.get("name")
+                canonical = self.get_canonical_name(char_id) or char_id
+                if canonical:
+                    self.set_intro_panel(canonical, panel_id)
+
+    def get_intro_characters_for_panel(self, panel_id: int) -> List[str]:
+        """Return canonical character names that are introduced in a given panel."""
+        return [entry["canonical_name"] for entry in self.character_registry.values()
+                if entry.get("intro_panel") == panel_id]
 
     def update_character(self, name: str, **kwargs):
         """Update specific fields of a character's state."""
@@ -239,15 +348,22 @@ class StorySectionMemory(BlackboardValidatorMixin):
 
     def inject_identity_tokens(self, name: str, tokens: Dict[str, Any]):
         """Phase 2: Inject identity embedding tokens for a character."""
-        if name in self.characters:
-            self.characters[name].identity_tokens = tokens
-            self._touch()
+        canonical = self.get_canonical_name(name) or name
+        matched = False
+        for char_key, char in self.characters.items():
+            if self._normalize_character_id(char_key) == self._normalize_character_id(canonical):
+                char.identity_tokens = tokens
+                matched = True
+        if not matched and canonical:
+            self.characters[canonical] = CharacterState(name=canonical, identity_tokens=tokens)
+        self._touch()
 
     def get_identity_tokens(self, name: str) -> Optional[Dict[str, Any]]:
         """Retrieve identity tokens for consistency enforcement."""
-        char = self.characters.get(name)
-        if char:
-            return char.identity_tokens
+        canonical = self.get_canonical_name(name) or name
+        for char_key, char in self.characters.items():
+            if self._normalize_character_id(char_key) == self._normalize_character_id(canonical):
+                return char.identity_tokens
         return None
 
     # ─────────────────────────────────────────────────────────────────────
@@ -418,6 +534,8 @@ class StorySectionMemory(BlackboardValidatorMixin):
             "total_pages": self.total_pages,
             "anchor_panel_id": self.anchor_panel_id,
             "anchor_features": self.anchor_features,
+            "character_registry": self.character_registry,
+            "introduction_panel_map": self.introduction_panel_map,
             "created_at": self.created_at,
             "last_updated": self.last_updated,
         }
@@ -443,6 +561,8 @@ class StorySectionMemory(BlackboardValidatorMixin):
             "total_pages": self.total_pages,
             "anchor_panel_id": self.anchor_panel_id,
             "anchor_features": self.anchor_features,
+            "character_registry": self.character_registry,
+            "introduction_panel_map": self.introduction_panel_map,
             "created_at": self.created_at,
             "last_updated": self.last_updated,
         }
@@ -469,6 +589,8 @@ class StorySectionMemory(BlackboardValidatorMixin):
         mem.total_pages = data.get("total_pages", 0)
         mem.anchor_panel_id = data.get("anchor_panel_id")
         mem.anchor_features = data.get("anchor_features")
+        mem.character_registry = data.get("character_registry", {})
+        mem.introduction_panel_map = data.get("introduction_panel_map", {})
         mem.created_at = data.get("created_at", time.time())
         mem.last_updated = data.get("last_updated", time.time())
 

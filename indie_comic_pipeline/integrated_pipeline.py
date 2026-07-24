@@ -244,23 +244,23 @@ class IntegratedComicPipeline:
 
     def wait_for_preheat(self):
         """Wait for the background model preheating thread to complete if it is running."""
-        if getattr(self, "_preheat_thread", None) is not None:
-            if self._preheat_thread.is_alive():
-                log.info("[Pipeline] Waiting for background model preheating to complete...")
-                start_time = time.time()
-                self._preheat_thread.join()
-                log.info(f"[Pipeline] Background preheating completed. Waited {time.time() - start_time:.2f}s.")
-            self._preheat_thread = None
+        thread = getattr(self, "_preheat_thread", None)
+        if thread is not None and hasattr(thread, "is_alive") and thread.is_alive():
+            log.info("[Pipeline] Waiting for background model preheating to complete...")
+            start_time = time.time()
+            thread.join()
+            log.info(f"[Pipeline] Background preheating completed. Waited {time.time() - start_time:.2f}s.")
+        self._preheat_thread = None
 
     def wait_for_export(self):
         """Wait for the background export thread to complete if it is running."""
-        if getattr(self, "_export_thread", None) is not None:
-            if self._export_thread.is_alive():
-                log.info("[Pipeline] Waiting for background export to complete...")
-                start_time = time.time()
-                self._export_thread.join()
-                log.info(f"[Pipeline] Background export completed. Waited {time.time() - start_time:.2f}s.")
-            self._export_thread = None
+        thread = getattr(self, "_export_thread", None)
+        if thread is not None and hasattr(thread, "is_alive") and thread.is_alive():
+            log.info("[Pipeline] Waiting for background export to complete...")
+            start_time = time.time()
+            thread.join()
+            log.info(f"[Pipeline] Background export completed. Waited {time.time() - start_time:.2f}s.")
+        self._export_thread = None
 
     def _run_phase8_export(self, pages: list, prompt: str):
         """Runs Phase 8 export in a background thread."""
@@ -272,6 +272,57 @@ class IntegratedComicPipeline:
             log.info("--- Phase 8: Background Exporting Complete ---")
         except Exception as e:
             log.error(f"Error in background Phase 8 export: {e}")
+
+    def _get_intro_anchor_panel_ids(self) -> List[int]:
+        """Return deterministic sorted intro anchor panel ids from the story plan."""
+        self.memory.build_introduction_panel_map()
+        return sorted(set(self.memory.introduction_panel_map.values()))
+
+    def _generate_intro_anchor_panels(self, checkpoint_path: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Generate all character intro panels sequentially so per-character anchors are established."""
+        panel_ids = self._get_intro_anchor_panel_ids()
+        results = []
+        if not panel_ids:
+            return results
+
+        for pid in panel_ids:
+            log.info(f"--- Phase 2: Intro Anchor Panel Generation (Panel {pid}) ---")
+            result = self._generate_single_panel_with_retry(pid)
+            results.append(result)
+            self.agent_coordinator.notify_panel_generated(result)
+            if checkpoint_path:
+                self.memory.save_checkpoint(checkpoint_path)
+                log.info(f"Saved mid-generation checkpoint for anchor panel {pid} to: {checkpoint_path}")
+        return results
+
+    def _apply_rolling_consistency_correction(self, panels: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Apply a secondary rolling consistency correction pass after initial generation."""
+        corrected_panels = []
+        for panel in panels:
+            panel_id = panel["panel_id"]
+            if panel_id == 1:
+                corrected_panels.append(panel)
+                continue
+
+            evaluation = self.quality_critic.evaluate(panel, self.memory)
+            visual_score = evaluation.get("scores", {}).get("visual_consistency", 0.0)
+            if evaluation["verdict"] == "fail" or visual_score < 0.70:
+                log.warning(
+                    f"Rolling consistency correction: Panel {panel_id} failed consistency threshold "
+                    f"(vis={visual_score:.3f}, verdict={evaluation['verdict']}). Regenerating with stronger guidance."
+                )
+                override_context = {
+                    "guidance_scale_override": max(panel.get("weights", {}).get("guidance_scale", 7.5) + 1.5, 10.0),
+                    "steps_override": max(panel.get("weights", {}).get("num_steps", 25) + 5, 30)
+                }
+                corrected = self._generate_single_panel_with_retry(panel_id, context_overrides=override_context)
+                corrected_panels.append(corrected)
+                self.agent_coordinator.notify_panel_generated(corrected)
+            else:
+                corrected_panels.append(panel)
+
+        corrected_panels.sort(key=lambda x: x["panel_id"])
+        return corrected_panels
 
     def _generate_panels_in_parallel(self, pids: List[int], checkpoint_path: Optional[str] = None) -> List[Dict[str, Any]]:
         """Generate a list of panels in parallel with a Memory Budgeter and OOM recovery."""
@@ -361,9 +412,12 @@ class IntegratedComicPipeline:
                     
         return panels_completed
 
-    def _generate_single_panel_with_retry(self, panel_id: int) -> Dict[str, Any]:
+    def _generate_single_panel_with_retry(self, panel_id: int,
+                                          context_overrides: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """Generate a single panel, execute the reject-regenerate loop, and apply typesetting."""
         context = self.agent_coordinator.get_generation_context(panel_id)
+        if context_overrides:
+            context.update(context_overrides)
         scene_graph = context.get("scene_graph", {})
     
         dialogue = context.get("panel_dialogue", "...")
@@ -524,28 +578,45 @@ class IntegratedComicPipeline:
             
             panels_completed = []
             total_panels = self.memory.total_panels
+            self.memory.build_introduction_panel_map()
+            anchor_panel_ids = self._get_intro_anchor_panel_ids()
+            anchor_panel_ids = sorted(set([1] + anchor_panel_ids))
+            log.info(f"Detected intro anchor panels: {self.memory.introduction_panel_map}")
         
-            # Panel 1 (Anchor) must run first to establish consistency priors
-            log.info("\n--- Phase 2: Anchor Panel Generation (Sequential) ---")
+            # Phase 2: Generate the primary anchor panel first (Panel 1)
+            log.info("\n--- Phase 2: Primary Anchor Panel Generation (Panel 1) ---")
             self.wait_for_preheat()
-            panel_1_result = self._generate_single_panel_with_retry(1)
-            panels_completed.append(panel_1_result)
-            self.agent_coordinator.notify_panel_generated(panel_1_result)
+            primary_anchor_result = self._generate_single_panel_with_retry(1)
+            panels_completed.append(primary_anchor_result)
+            self.agent_coordinator.notify_panel_generated(primary_anchor_result)
             
-            # Save mid-generation checkpoint for panel 1
+            # Save mid-generation checkpoint for anchor panel 1
             checkpoint_name = "storyboard_checkpoint_latest.json"
             checkpoint_path = os.path.join(self.output_dir, checkpoint_name)
             self.memory.save_checkpoint(checkpoint_path)
-            log.info(f"Saved mid-generation checkpoint for panel 1 to: {checkpoint_path}")
-            
-            # Generate remaining panels (2 to N) in parallel
-            if total_panels > 1:
-                log.info(f"\n--- Generating Remaining {total_panels - 1} Panels in Parallel ---")
-                remaining_results = self._generate_panels_in_parallel(list(range(2, total_panels + 1)), checkpoint_path=checkpoint_path)
+            log.info(f"Saved mid-generation checkpoint for anchor panel 1 to: {checkpoint_path}")
+
+            # Phase 2b: Sequential per-character intro anchor generation for later intro panels
+            additional_anchor_ids = [pid for pid in anchor_panel_ids if pid != 1]
+            if additional_anchor_ids:
+                log.info("\n--- Phase 2: Supplemental Character Intro Anchor Generation ---")
+                self.wait_for_preheat()
+                anchor_results = self._generate_intro_anchor_panels(checkpoint_path=checkpoint_path)
+                panels_completed.extend(anchor_results)
+
+            # Generate remaining panels in parallel, excluding all intro anchor panels and Panel 1
+            remaining_panel_ids = [pid for pid in range(1, total_panels + 1)
+                                   if pid not in anchor_panel_ids and pid != 1]
+            if remaining_panel_ids:
+                log.info(f"\n--- Generating Remaining {len(remaining_panel_ids)} Panels in Parallel ---")
+                remaining_results = self._generate_panels_in_parallel(remaining_panel_ids, checkpoint_path=checkpoint_path)
                 panels_completed.extend(remaining_results)
             
             # Sort panels by ID to restore sequential order
             panels_completed.sort(key=lambda x: x["panel_id"])
+
+            # Rolling consistency correction pass
+            panels_completed = self._apply_rolling_consistency_correction(panels_completed)
             
             # Clean up hooks and cached VRAM tensors
             self.panel_engine.cleanup()
@@ -593,6 +664,28 @@ class IntegratedComicPipeline:
             cbz_path = os.path.join(self.output_dir, f"{safe_title}.cbz")
             pdf_path = os.path.join(self.output_dir, f"{safe_title}.pdf")
             html_path = os.path.join(self.output_dir, "web_comic.html")
+            metadata_path = self.exporter.export_reproducibility_metadata(
+                {
+                    "prompt": prompt,
+                    "character_name": character_name,
+                    "story_world": story_world,
+                    "panel_count": panel_count,
+                    "style_reference": style_reference,
+                    "character_characteristics": character_characteristics,
+                    "story_reference": story_reference,
+                    "mood_shifts": mood_shifts,
+                    "story_mode": story_mode,
+                    "generated_at": time.time(),
+                    "anchor_panels": anchor_panel_ids,
+                    "character_registry": self.memory.character_registry,
+                    "introduction_panel_map": self.memory.introduction_panel_map,
+                    "panels": [
+                        {"panel_id": p["panel_id"], "page_num": p["page_num"], "backend": p["backend"], "image_path": p["image_path"]}
+                        for p in panels_completed
+                    ]
+                },
+                title=title
+            )
             
             # Start background thread to run Phase 8
             import threading
@@ -608,7 +701,11 @@ class IntegratedComicPipeline:
                 "cbz_path": cbz_path,
                 "html_path": html_path,
                 "pdf_path": pdf_path,
-                "panels": panels_completed
+                "metadata_path": metadata_path,
+                "panels": panels_completed,
+                "character_registry": self.memory.character_registry,
+                "introduction_panel_map": self.memory.introduction_panel_map,
+                "anchor_panel_ids": anchor_panel_ids,
             }
 
         finally:
