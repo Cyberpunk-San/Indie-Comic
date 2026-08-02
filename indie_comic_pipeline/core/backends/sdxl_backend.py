@@ -183,7 +183,19 @@ class SDXLBackend(BaseBackend):
             raise RuntimeError("SDXL pipeline is not loaded.")
         
         pipe = self._pipe
-        device = getattr(pipe, "_execution_device", None) or (torch.device("cuda") if torch.cuda.is_available() else pipe.device)
+        if torch.cuda.is_available():
+            device = torch.device("cuda")
+            for mod in [getattr(pipe, "text_encoder", None),
+                        getattr(pipe, "text_encoder_2", None),
+                        getattr(pipe, "unet", None),
+                        getattr(pipe, "vae", None)]:
+                if mod is not None and hasattr(mod, "to"):
+                    try:
+                        mod.to(device)
+                    except Exception:
+                        pass
+        else:
+            device = pipe.device
         
         width = config.get("width", 768)
         height = config.get("height", 768)
@@ -193,8 +205,7 @@ class SDXLBackend(BaseBackend):
         
         manager = config.get("mdcp_manager")
         
-        gen_device = "cpu" if device.type == "cpu" else "cuda"
-        generator = torch.Generator(device=gen_device).manual_seed(seed)
+        generator = torch.Generator(device=device).manual_seed(seed)
         
         # 1. Encode prompts (positive and negative)
         prompt_embeds, negative_prompt_embeds, pooled_prompt_embeds, negative_pooled_prompt_embeds = pipe.encode_prompt(
