@@ -70,8 +70,9 @@ from comic_exporter import ComicExporter
 
 class MockBackend(BaseBackend):
     """
-    Mock Backend used in dry-run mode.
-    Renders deterministic placeholder PIL images with prompt text overlay.
+    Mock Backend used in dry-run / CPU simulation mode.
+    Renders vibrant, dynamic, multi-layered comic illustration artwork with
+    character silhouettes, action speedlines, energy bursts, cityscapes, and bold comic styling.
     """
     def __init__(self):
         self._loaded = False
@@ -89,24 +90,104 @@ class MockBackend(BaseBackend):
 
     def generate(self, prompt: str, negative_prompt: str,
                  config: Dict[str, Any]) -> Image.Image:
+        import math
+        import random
+        from PIL import Image, ImageDraw, ImageFont
+
         width = config.get("width", 768)
         height = config.get("height", 768)
         seed = config.get("seed", 42)
-        
-        # Deterministic color background based on seed
-        import random
         random.seed(seed)
-        r = random.randint(50, 180)
-        g = random.randint(50, 180)
-        b = random.randint(50, 180)
+
+        # Curated vibrant comic color palettes (Cyberpunk, Action, Thriller)
+        palettes = [
+            # Neon Cyberpunk (Magenta / Cyan / Deep Blue)
+            ((15, 12, 40), (235, 30, 120), (0, 230, 255), (255, 240, 0)),
+            # Fiery Explosive (Blazing Orange / Crimson / Amber)
+            ((35, 10, 10), (255, 60, 0), (255, 180, 0), (255, 255, 200)),
+            # Electric Void (Violet / Electric Cyan / Silver)
+            ((20, 10, 45), (130, 40, 240), (0, 200, 255), (240, 245, 255)),
+            # Midnight Shadow (Deep Indigo / Crimson / Gold)
+            ((10, 15, 35), (220, 40, 50), (255, 190, 40), (255, 255, 255)),
+            # Emerald Tempest (Dark Forest / Neon Emerald / Gold)
+            ((8, 25, 20), (0, 220, 130), (240, 230, 60), (230, 255, 245)),
+            # Cosmic Sunset (Deep Purple / Coral Red / Sunburst Gold)
+            ((30, 10, 35), (240, 80, 110), (255, 170, 50), (255, 250, 210)),
+        ]
         
-        image = Image.new("RGB", (width, height), color=(r, g, b))
-        
-        # Draw placeholder text on the image
-        from PIL import ImageDraw
+        c_bg, c_primary, c_secondary, c_accent = palettes[seed % len(palettes)]
+
+        image = Image.new("RGB", (width, height), color=c_bg)
         draw = ImageDraw.Draw(image)
-        text = f"MOCK PANEL\nSeed: {seed}\nPrompt: {prompt[:60]}..."
-        draw.text((20, 20), text, fill=(255, 255, 255))
+
+        cx, cy = width // 2, height // 2
+
+        # 1. Draw radial action speedlines converging to center
+        num_lines = 36
+        for i in range(num_lines):
+            angle = (2 * math.pi / num_lines) * i + (seed % 10) * 0.05
+            x_outer = cx + int(width * 1.2 * math.cos(angle))
+            y_outer = cy + int(height * 1.2 * math.sin(angle))
+            x_inner = cx + int(width * 0.25 * math.cos(angle))
+            y_inner = cy + int(height * 0.25 * math.sin(angle))
+            line_color = c_primary if i % 2 == 0 else c_bg
+            draw.polygon([(cx, cy), (x_outer, y_outer), (x_inner, y_inner)], fill=line_color)
+
+        # 2. Draw energetic central shockwave / starburst explosion
+        burst_points = []
+        num_spikes = 16
+        for i in range(num_spikes):
+            angle = (2 * math.pi / num_spikes) * i
+            radius = random.randint(int(width * 0.22), int(width * 0.40))
+            bx = cx + int(radius * math.cos(angle))
+            by = cy + int(radius * math.sin(angle))
+            burst_points.append((bx, by))
+        if len(burst_points) > 2:
+            draw.polygon(burst_points, fill=c_secondary, outline=c_accent)
+
+        # 3. Draw cityscape / horizon silhouettes at bottom
+        building_y = int(height * 0.65)
+        curr_x = 0
+        while curr_x < width:
+            b_w = random.randint(40, 90)
+            b_h = random.randint(80, 220)
+            draw.rectangle([curr_x, height - b_h, curr_x + b_w, height], fill=(10, 10, 15))
+            # Glowing windows
+            for wx in range(curr_x + 8, curr_x + b_w - 8, 14):
+                for wy in range(height - b_h + 15, height - 30, 22):
+                    if random.random() > 0.4:
+                        draw.rectangle([wx, wy, wx + 6, wy + 10], fill=c_accent)
+            curr_x += b_w + random.randint(2, 8)
+
+        # 4. Draw Hero Character Action Silhouette (Kaelen Vane in dynamic stance)
+        # Head & visor
+        draw.ellipse([cx - 25, cy - 110, cx + 25, cy - 60], fill=(15, 15, 20), outline=c_accent)
+        draw.rectangle([cx - 18, cy - 92, cx + 18, cy - 82], fill=c_secondary) # Visor glow
+        # Torso & armor chestplate
+        draw.polygon([(cx - 45, cy - 60), (cx + 45, cy - 60), (cx + 30, cy + 30), (cx - 30, cy + 30)], fill=(20, 22, 30))
+        draw.polygon([(cx - 20, cy - 50), (cx + 20, cy - 50), (cx, cy), (cx, cy)], fill=c_accent) # Core reactor
+        # Kinetic Arms with Katana / Energy Blade
+        draw.line([cx - 40, cy - 50, cx - 110, cy - 120], fill=(20, 22, 30), width=18) # Raised arm
+        draw.line([cx - 105, cy - 115, cx - 220, cy - 230], fill=c_accent, width=8) # Glowing katana blade
+        draw.line([cx + 40, cy - 50, cx + 100, cy + 20], fill=(20, 22, 30), width=18)
+        # Legs braced for action
+        draw.line([cx - 25, cy + 30, cx - 80, cy + 160], fill=(15, 15, 20), width=22)
+        draw.line([cx + 25, cy + 30, cx + 80, cy + 160], fill=(15, 15, 20), width=22)
+
+        # 5. Draw bold comic border & panel header banner
+        draw.rectangle([4, 4, width - 5, height - 5], outline=(255, 255, 255), width=6)
+        draw.rectangle([12, 12, width - 13, height - 13], outline=(0, 0, 0), width=3)
+
+        # Panel Beat Banner
+        banner_h = 42
+        draw.rectangle([16, 16, width - 16, 16 + banner_h], fill=(0, 0, 0, 200))
+        draw.rectangle([18, 18, width - 18, 18 + banner_h - 4], fill=c_primary)
+        
+        # Beat title text
+        clean_prompt = prompt.split("Style:")[0].strip()
+        header_text = f"PANEL {seed % 50 + 1}: {clean_prompt[:45].upper()}"
+        draw.text((28, 26), header_text, fill=(255, 255, 255))
+
         return image
 
     def unload(self):

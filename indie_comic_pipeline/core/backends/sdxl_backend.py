@@ -207,16 +207,34 @@ class SDXLBackend(BaseBackend):
         
         generator = torch.Generator(device=device).manual_seed(seed)
         
-        # 1. Encode prompts (positive and negative)
-        prompt_embeds, negative_prompt_embeds, pooled_prompt_embeds, negative_pooled_prompt_embeds = pipe.encode_prompt(
-            prompt=prompt,
-            prompt_2=prompt,
-            device=device,
-            num_images_per_prompt=1,
-            do_classifier_free_guidance=True,
-            negative_prompt=negative_prompt,
-            negative_prompt_2=negative_prompt,
-        )
+        # 1. Encode prompts (positive and negative) using Compel for long prompt (>77 token) support
+        compel_used = False
+        try:
+            from compel import Compel, ReturnedEmbeddingsType
+            if getattr(self, "_compel", None) is None:
+                self._compel = Compel(
+                    tokenizer=[pipe.tokenizer, pipe.tokenizer_2],
+                    text_encoder=[pipe.text_encoder, pipe.text_encoder_2],
+                    returned_embeddings_type=ReturnedEmbeddingsType.PENULTIMATE_HIDDEN_STATES_NON_NORMALIZED,
+                    requires_pooled=[False, True],
+                    device=device
+                )
+            prompt_embeds, pooled_prompt_embeds = self._compel(prompt)
+            neg_prompt = negative_prompt if negative_prompt else ""
+            negative_prompt_embeds, negative_pooled_prompt_embeds = self._compel(neg_prompt)
+            compel_used = True
+            log.info("  [SDXL-MDCP] Compel long-prompt encoding active (bypassing 77-token CLIP limit)")
+        except Exception as e:
+            log.warning(f"  [SDXL-MDCP] Compel encoding fallback to standard encode_prompt: {e}")
+            prompt_embeds, negative_prompt_embeds, pooled_prompt_embeds, negative_pooled_prompt_embeds = pipe.encode_prompt(
+                prompt=prompt,
+                prompt_2=prompt,
+                device=device,
+                num_images_per_prompt=1,
+                do_classifier_free_guidance=True,
+                negative_prompt=negative_prompt,
+                negative_prompt_2=negative_prompt,
+            )
         
         # Combine embeds for CFG
         prompt_embeds_cat = torch.cat([negative_prompt_embeds, prompt_embeds], dim=0)

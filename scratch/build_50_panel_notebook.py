@@ -1,0 +1,490 @@
+import json
+import os
+
+def create_notebook():
+    cells = []
+    
+    # Header Markdown
+    cells.append({
+        "cell_type": "markdown",
+        "id": "header_md",
+        "metadata": {},
+        "source": [
+            "# 🎨 MDCP 50-Panel Single-Page Dramatic Thriller Comic Generator\n",
+            "This notebook implements the complete end-to-end **Multi-Level Diffusion Consistency Prior (MDCP)** pipeline to create a 50-panel high-density dramatic thriller comic.\n",
+            "\n",
+            "### Key Highlights:\n",
+            "- **Zero Input Required**: Auto-generates a 50-beat epic action/thriller story spanning 5 acts out of the box.\n",
+            "- **MDCP Engine**: Employs $T_1$ (latent smoothing), $T_2$ (identity cross-attention blending), and $T_3$ (spatiotemporal lighting alignment).\n",
+            "- **High-Density Canvas**: Assembles 50 distinct panel images on a high-resolution $2500 \\times 3750$ single-page comic grid ($5 \\times 10$).\n",
+            "- **Integrated Text & Speech**: Overlays speech bubbles, thriller dialogue, and action sound FX via `TextImageIntegrator`.\n",
+            "- **Multi-Format Export**: Generates High-Res PNG, Display PNG, CBZ Comic Archive, PDF Document, and Interactive HTML Web Reader."
+        ]
+    })
+
+    # Section 0 MD
+    cells.append({
+        "cell_type": "markdown",
+        "id": "sec0_md",
+        "metadata": {},
+        "source": [
+            "## 🔧 0. Universal Environment Setup & GPU Acceleration Check\n",
+            "Configures paths for Kaggle, Colab, or local Jupyter environments, and verifies CUDA TF32 acceleration."
+        ]
+    })
+
+    # Section 0 Code
+    cells.append({
+        "cell_type": "code",
+        "execution_count": None,
+        "id": "sec0_code",
+        "metadata": {},
+        "outputs": [],
+        "source": [
+            "# ============================================================\n",
+            "# 0. Universal Cloud / Local Setup & GPU Acceleration Check\n",
+            "# ============================================================\n",
+            "import os\n",
+            "import sys\n",
+            "import torch\n",
+            "\n",
+            "_IN_KAGGLE = os.path.exists(\"/kaggle/working\")\n",
+            "_IN_CLOUD = _IN_KAGGLE\n",
+            "\n",
+            "if _IN_CLOUD:\n",
+            "    print(\"[Kaggle] Detected Kaggle Environment. Setting up repo paths...\")\n",
+            "    _repo = \"/kaggle/working/Indie-Comic\"\n",
+            "    if not os.path.exists(_repo):\n",
+            "        import subprocess\n",
+            "        subprocess.run([\"git\", \"clone\", \"--depth\", \"1\", \"https://github.com/Cyberpunk-San/Indie-Comic.git\", _repo], check=True)\n",
+            "    if _repo not in sys.path:\n",
+            "        sys.path.append(_repo)\n",
+            "    _pipeline_dir = os.path.join(_repo, \"indie_comic_pipeline\")\n",
+            "    if _pipeline_dir not in sys.path:\n",
+            "        sys.path.append(_pipeline_dir)\n",
+            "    setup_file = f\"{_repo}/indie_comic_pipeline/colab_setup.py\"\n",
+            "    if os.path.exists(setup_file):\n",
+            "        exec(open(setup_file).read(), globals())\n",
+            "else:\n",
+            "    print(\"[Env] Detected Local Jupyter / Python Environment.\")\n",
+            "    if os.getcwd() not in sys.path:\n",
+            "        sys.path.append(os.getcwd())\n",
+            "    _local_pipe = os.path.join(os.getcwd(), \"indie_comic_pipeline\")\n",
+            "    if os.path.exists(_local_pipe) and _local_pipe not in sys.path:\n",
+            "        sys.path.append(_local_pipe)\n",
+            "\n",
+            "# Verify CUDA GPU availability & TF32 acceleration\n",
+            "if torch.cuda.is_available():\n",
+            "    print(f\"[GPU] GPU Detected: {torch.cuda.get_device_name(0)}\")\n",
+            "    torch.backends.cuda.matmul.allow_tf32 = True\n",
+            "    torch.backends.cudnn.allow_tf32 = True\n",
+            "    try:\n",
+            "        torch.set_float32_matmul_precision('high')\n",
+            "    except Exception:\n",
+            "        pass\n",
+            "    DRY_RUN = False\n",
+            "else:\n",
+            "    print(\"[CPU] No CUDA GPU detected. Running in fast deterministic DRY-RUN mock mode.\")\n",
+            "    DRY_RUN = True\n"
+        ]
+    })
+
+    # Section 1 MD
+    cells.append({
+        "cell_type": "markdown",
+        "id": "sec1_md",
+        "metadata": {},
+        "source": [
+            "## 🧬 1. MDCP Pipeline Configuration & Hyperparameter Setup\n",
+            "Configures the Multi-Level Diffusion Consistency Prior (MDCP) attention manager and core parameters:\n",
+            "- $\\lambda_1 = 1.0$: Latent noise smoothing & artifact suppression ($T_1$)\n",
+            "- $\\lambda_2 = 1.0$: Reference identity cross-attention key/value blending ($\\beta = 0.15$) ($T_2$)\n",
+            "- $\\lambda_3 = 1.0$: Global spatiotemporal lighting & contrast alignment ($\\Omega = 0.50$) ($T_3$)"
+        ]
+    })
+
+    # Section 1 Code
+    cells.append({
+        "cell_type": "code",
+        "execution_count": None,
+        "id": "sec1_code",
+        "metadata": {},
+        "outputs": [],
+        "source": [
+            "# ============================================================\n",
+            "# 1. MDCP Master Pipeline & Attention Manager Configuration\n",
+            "# ============================================================\n",
+            "from integrated_pipeline import IntegratedComicPipeline\n",
+            "from core.advanced_attention import AdvancedAttentionManager\n",
+            "from core.layout_engine import MangaFlowLayoutEngine\n",
+            "from comic_exporter import ComicExporter\n",
+            "from PIL import Image\n",
+            "\n",
+            "print(\"Initializing MDCP Master Pipeline...\")\n",
+            "pipeline = IntegratedComicPipeline(dry_run=DRY_RUN, skip_backends=DRY_RUN)\n",
+            "\n",
+            "# Configure output paths\n",
+            "output_dir = os.path.join(os.getcwd(), \"outputs\", \"comics\")\n",
+            "panels_dir = os.path.join(os.getcwd(), \"outputs\", \"panels_50\")\n",
+            "os.makedirs(output_dir, exist_ok=True)\n",
+            "os.makedirs(panels_dir, exist_ok=True)\n",
+            "\n",
+            "pipeline.panels_dir = panels_dir\n",
+            "pipeline.panel_engine.output_dir = panels_dir\n",
+            "pipeline.text_integrator.output_dir = panels_dir\n",
+            "\n",
+            "print(\"[OK] MDCP Pipeline initialized successfully!\")\n"
+        ]
+    })
+
+    # Section 2 MD
+    cells.append({
+        "cell_type": "markdown",
+        "id": "sec2_md",
+        "metadata": {},
+        "source": [
+            "## 📖 2. Auto-Generative 50-Beat High-Intensity Thriller Story Engine\n",
+            "Automatically constructs 50 distinct dramatic thriller action beats across 5 acts without needing any manual user input:\n",
+            "- **Act I: Re-Entry & Planetary Siege** (Panels 1–10)\n",
+            "- **Act II: Cybernetic Swarm & Colossus Rampage** (Panels 11–20)\n",
+            "- **Act III: Chrono Rupture & Space Void Clash** (Panels 21–30)\n",
+            "- **Act IV: Event Horizon Singularity & Dragon Titan** (Panels 31–40)\n",
+            "- **Act V: Overdrive Zenith & Dimensional Slash** (Panels 41–50)"
+        ]
+    })
+
+    # Section 2 Code
+    cells.append({
+        "cell_type": "code",
+        "execution_count": None,
+        "id": "sec2_code",
+        "metadata": {},
+        "outputs": [],
+        "source": [
+            "# ============================================================\n",
+            "# 2. Embedded 50-Beat High-Voltage Thriller Story Generator\n",
+            "# ============================================================\n",
+            "\n",
+            "AUTO_STORY_PROMPT = \"Cyberpunk Overdrive Saga: The Awakening of the Eclipse Blade\"\n",
+            "AUTO_CHARACTER_NAME = \"Kaelen Vane\"\n",
+            "AUTO_STORY_WORLD = \"Neo-Aethelgard Orbital Spire & Shattered Seabed\"\n",
+            "\n",
+            "# 50 Ultra-Detailed Dramatic Thriller Beats\n",
+            "DRAMATIC_50_BEATS = [\n",
+            "    # Act I – Re-entry & Planetary Siege (1-10)\n",
+            "    (\"Orbital Drop\", \"Cybernetic warrior Kaelen Vane falls from low Earth orbit, atmospheric friction igniting fiery plasma trails around his armored chassis\", \"Entering atmosphere!\", \"extreme low-angle tilt\", \"blazing orange/fire red\", \"plummeting downward at Mach 25 engulfed in atmospheric friction flames\"),\n",
+            "    (\"Crater Impact\", \"Impact creates a colossal kilometer-wide crater, shattering city bedrock into soaring shockwave monoliths\", \"KABOOM!\", \"wide panoramic crater view\", \"smoldering ash & magma orange\", \"braced in center of crater with energy shockwaves radiating outward\"),\n",
+            "    (\"Swarm Awakening\", \"Ten thousand crimson optic combat mechs emerge from the dust rim, surrounding the impact zone\", \"Target located. Eliminate!\", \"high-angle wide vantage\", \"gunmetal grey & ominous red\", \"rising from crater dust as thousand laser targeting grids lock on\"),\n",
+            "    (\"Railgun Storm\", \"Hyper-velocity railgun slugs rain down, cutting through atmospheric dust in blue tracer arcs\", \"Bullet-time dodge!\", \"tracking bullet-time macro\", \"electric cyan & deep navy\", \"twisting torso in mid-air as railgun slugs pass within inches of visor\"),\n",
+            "    (\"Mach Sprint\", \"Kaelen ignites suit thrusters, sprinting faster than sound across crumbling concrete\", \"Too slow!\", \"kinetic side profile blur\", \"violet speed motion & neon blue\", \"sprinting horizontally with shockwave rings forming behind heels\"),\n",
+            "    (\"Facade Vertical Run\", \"Sprinting straight up the vertical glass wall of a 100-story skyscraper while windows implode\", \"Going vertical!\", \"extreme upward dutch angle\", \"glass shatter reflections & silver\", \"vertical sprint up glass building while pressure wave shatters facade\"),\n",
+            "    (\"Jet Cleave\", \"Leaping off the skyscraper peak and delivering a jet-assisted kick slicing an enemy gunship in two\", \"Slice!\", \"impact freeze-frame mid-air\", \"fiery explosion flare\", \"flying side-kick cleaving jet fuselage cleanly in half\"),\n",
+            "    (\"Missile Surfing\", \"Landing directly onto a supersonic cruise missile, riding it through dense flak cannon fire\", \"Riding the payload!\", \"over-shoulder aerial tracking\", \"smoke trail & stormy sky\", \"standing balanced on missile nose cone steering with magnetic boots\"),\n",
+            "    (\"Nuclear Burst Dive\", \"Backflipping through the radiant fireball of a tactical warhead, armored cape burning with plasma\", \"Clear the zone!\", \"wide nuclear silhouette\", \"blinding nuclear white & gold\", \"inverting body in mid-air against towering mushroom cloud\"),\n",
+            "    (\"Flagship Touchdown\", \"Crashing onto the flight deck of the colossal flagship Superion, armor cracking steel plates\", \"Touchdown.\", \"low-angle landing impact\", \"dark steel & electric sparks\", \"three-point superhero landing sending lightning arcs through deck\"),\n",
+            "\n",
+            "    # Act II – Total War & Colossus Rampage (11-20)\n",
+            "    (\"Drone Swarm Storm\", \"Sky turns black as 50,000 kamikaze attack drones descend upon the flagship deck\", \"They just keep coming!\", \"extreme wide sky shot\", \"black swarm against violent storm\", \"drawing dual plasma katanas as sky darkens with drone cloud\"),\n",
+            "    (\"Blade Tempest\", \"Spinning into a 360-degree whirlwind of plasma slashes, bisecting hundreds of drones per second\", \"Whirlwind slash!\", \"radial action blur\", \"electric blue blade arcs\", \"blade tempest leaving cloud of cut drone debris and spark showers\"),\n",
+            "    (\"Gravity Rupture\", \"Gravitational field distorts, causing entire city quadrants to fold 90 degrees sideways\", \"Reality bending!\", \"dutch angle warping tilt\", \"twisted concrete & purple void\", \"leaning into gravitational vector as skyscrapers fold sideways around him\"),\n",
+            "    (\"Train Javelin\", \"Ripping a multi-ton maglev train off its rails and hurling it like a massive javelin\", \"Take this!\", \"dynamic full body heave\", \"metallic shine & electric arcs\", \"heaving maglev engine overhead with plasma energy pulsing in arms\"),\n",
+            "    (\"Titan Emergence\", \"A 300-meter gargantuan enemy Titan mech rises from the burning ocean horizon\", \"It's colossal!\", \"extreme worm-eye view\", \"dark silhouette against crimson sunset\", \"looking up from ground level at 300-meter mechanical leg stepping down\"),\n",
+            "    (\"Skyscraper Throw\", \"Gripping a 50-story building foundation and launching the entire structure into the Titan's chest\", \"Heads up!\", \"epic scale wide shot\", \"shattering glass & dust cloud\", \"ripping building foundation and hurling it straight at mech torso\"),\n",
+            "    (\"Beam Collision\", \"Chest energy reactor beam collides with Titan's laser, splitting the clouds above in half\", \"MAX POWER!\", \"center beam collision split\", \"blinding crimson & celestial gold\", \"bracing feet in crater as two massive energy beams lock in struggle\"),\n",
+            "    (\"Seabed Shockwave\", \"Impact shockwave parts the entire surrounding ocean, exposing raw ancient seabed\", \"Force ripple!\", \"extreme wide ocean panorama\", \"sea spray & deep ocean blue\", \"shockwave ring expanding outward pushing ocean wall 100 meters high\"),\n",
+            "    (\"Freefall Combat\", \"Brutal hand-to-hand combat while falling through 30,000 feet of cloud layers\", \"Claw for claw!\", \"vertical downward tracking\", \"cloud wisps & speed lines\", \"exchanging lightning fists with enemy champion while plummeting downward\"),\n",
+            "    (\"Planetary Faultline\", \"Titan slammed into the mantle, creating a new deep canyon rift across the continent\", \"IMPACT ZERO!\", \"satellite perspective\", \"cracked earth & fiery fissure\", \"smoke column rising from newly formed kilometer-deep continental fault\"),\n",
+            "\n",
+            "    # Act III – Chrono Rupture & Dimensional Void (21-30)\n",
+            "    (\"Chrono Lock\", \"Time stops completely in mid-air, suspending falling raindrops and bullets like crystal spheres\", \"Chrono lock activated.\", \"macro static freeze-frame\", \"monochrome grayscale with vivid hero\", \"walking calmly past frozen bullet trails and mid-air explosion shrapnel\"),\n",
+            "    (\"Flash Afterimages\", \"Moving at hyper-speeds, creating a complete 360-degree ring of afterimages around the target\", \"Omnipresent!\", \"multi-shadow ring composition\", \"cyan afterimage trails\", \"speed afterimages surrounding bewildered enemy from all angles\"),\n",
+            "    (\"Infinite Legion\", \"Enemy replicates infinitely, forming an endless army covering the horizon\", \"We are infinite!\", \"extreme wide legion vista\", \"crimson eyes & dark steel\", \"countless identical enemy clones marching forward in locked formation\"),\n",
+            "    (\"Dimensional Portal Combat\", \"Slashes tear open space, fighting simultaneously across multiple dimensional rift portals\", \"Rift burst!\", \"split portal multi-pane\", \"dimensional purple & void gold\", \"punching through spatial rift and striking enemy in another dimension\"),\n",
+            "    (\"Stratosphere Upper-Cut\", \"Delivering a kinetic uppercut launching the enemy commander straight into orbit\", \"Up you go!\", \"upward tracking streak\", \"shockwave ring skyward\", \"uppercut launching enemy through upper atmosphere into space\"),\n",
+            "    (\"Orbital Array Duel\", \"Battling across solar panels of an orbital space station in zero-gravity with Earth below\", \"Zero-G duel!\", \"deep space view with Earth curve\", \"deep space black & blue Earth glow\", \"leaping between space station solar wings in zero gravity\"),\n",
+            "    (\"Meteor Re-Entry\", \"Catching a giant falling meteor and riding it back down toward Earth at re-entry velocity\", \"Riding the meteor!\", \"extreme descent tracking\", \"flaming meteor friction tail\", \"standing atop burning meteor surface driving it downward like a sled\"),\n",
+            "    (\"Lunar Cleave\", \"Enemy slash cuts a massive slice through the Moon, visible from Earth's surface\", \"The Moon... split!\", \"lunar space wide shot\", \"glowing white moon slash\", \"crescent moon splitting with glowing energy crack across lunar crust\"),\n",
+            "    (\"Debris Firestorm\", \"Glowing moon fragments rain down upon Earth in an apocalyptic meteor shower\", \"Rain of fire!\", \"global perspective view\", \"fiery streak trails\", \"giant lunar rock chunks falling through burning atmosphere\"),\n",
+            "    (\"Atmospheric Ignition\", \"The entire global atmosphere ignites into a swirling plasma storm canopy\", \"The sky is burning!\", \"horizon wide panorama\", \"swirling plasma violet & orange\", \"looking up at sky burning with electric plasma aurora waves\"),\n",
+            "\n",
+            "    # Act IV – Event Horizon & Dragon Titan Apocalypse (31-40)\n",
+            "    (\"Black Hole Singularity\", \"An artificial black hole singularity opens above the shattered metropolis\", \"Event Horizon!\", \"vortex center composition\", \"pitch black core & light lensing\", \"gravitational lensing bending light around dark black singularity core\"),\n",
+            "    (\"City Upward Lift\", \"Entire city blocks are ripped from the ground and sucked upward into the singularity\", \"Metropolis lifted!\", \"vertical soaring wide shot\", \"shattered skyscrapers in gravity\", \"buildings and roads breaking apart floating up into gravitational core\"),\n",
+            "    (\"Mid-Air Rescue\", \"Sprinting across falling debris in mid-air to rescue falling civilians in an energy shield\", \"Got you all!\", \"multi-focus kinetic action\", \"golden aura glow & blue sky\", \"catching falling citizens in forcefield while dashing across debris\"),\n",
+            "    (\"Dragon Titan Unfold\", \"Enemy boss transforms into a colossal mechanical Dragon Titan of destruction\", \"Final mechanical evolution!\", \"epic low-angle creature reveal\", \"dark steel & glowing plasma scales\", \"robotic dragon roaring with massive wings unfolding across storm sky\"),\n",
+            "    (\"Dogfight Through Clouds\", \"Supersonic aerial combat weaving between the Dragon Titan's wings through lightning clouds\", \"Dogfight!\", \"kinetic aerial tracking\", \"cloud streaks & jet streams\", \"weaving between dragon's mechanical jaws in high-speed flight\"),\n",
+            "    (\"Lightning Bolt Capture\", \"Reaching into a thunderstorm with bare hand and catching a natural lightning bolt\", \"Hold the storm!\", \"high-contrast electric flash\", \"blinding electric blue & white\", \"hand grasping jagged lightning bolt as raw electricity arcs over armor\"),\n",
+            "    (\"Lightning Spear Throw\", \"Hurling the compressed lightning bolt like a javelin through the Dragon Titan's core\", \"SMITE!\", \"impact beam pass\", \"pure white lightning trail\", \"lightning spear piercing straight through Dragon Titan's chest reactor\"),\n",
+            "    (\"Mountain Range Crash\", \"Dragon Titan crashes into a mountain range, obliterating a granite peak into dust\", \"Crash landing!\", \"wide mountain impact\", \"rock dust explosion & ash\", \"dragon mech plowing through mountain peak sending boulders flying\"),\n",
+            "    (\"Magma Geyser Eruption\", \"Planetary crust ruptures, fountains of molten magma erupting from fissure trenches\", \"Planetary core rupture!\", \"magma landscape panorama\", \"molten orange & ash black\", \"lava erupting from subterranean cracks underfoot into night sky\"),\n",
+            "    (\"Cosmic Core Siphon\", \"Enemy boss absorbs planetary core energy into a radiant cosmic god form\", \"Absorbing planet core!\", \"cosmic energy halo\", \"blinding planetary core light\", \"boss floating in center of planet-wide energy siphon halo\"),\n",
+            "\n",
+            "    # Act V – Overdrive Zenith & Dimensional Slash Dawn (41-50)\n",
+            "    (\"Extinction Beam\", \"Enemy fires a planetary beam so colossal it is visible from deep space\", \"Extinction Beam!\", \"deep space view of Earth\", \"golden energy beam in space\", \"colossal energy beam erupting from planet surface out into cosmos\"),\n",
+            "    (\"Barrier Energy Lock\", \"Hero's shield collides with the extinction beam, world shaking from raw force\", \"I will NOT fall!\", \"center clash explosion\", \"gold vs crimson shockwave\", \"pushing forward step-by-step against overwhelming energy column\"),\n",
+            "    (\"Memory Flash\", \"A serene one-second memory of why he fights flashes in warm peaceful light\", \"Remember why...\", \"soft nostalgic warm glow\", \"vivid warm memory highlight\", \"close-up of eyes reflecting quiet peaceful dawn memory\"),\n",
+            "    (\"Suit Overdrive 1000%\", \"Overclocking suit reactor beyond 1000% safety limit, energy veins bursting through armor\", \"OVERDRIVE 1000%!\", \"intense power aura close-up\", \"white-hot energy veins\", \"suit armor cracking as core glows with supernovic intensity\"),\n",
+            "    (\"Mach 1000 Strike\", \"Rockets forward at Mach 1000, slicing straight through the center of the extinction beam\", \"FINAL STRIKE!\", \"hyper-speed line motion\", \"blinding white kinetic streak\", \"single white streak cutting straight through enemy's giant beam\"),\n",
+            "    (\"Reality Fabric Tear\", \"Ultimate katana slash tears open the fabric of space-time itself\", \"Dimensional Slash!\", \"reality crack line\", \"cosmic void fracture\", \"space tearing along sword edge revealing starfield behind spatial tear\"),\n",
+            "    (\"Absolute Silence\", \"Sound cuts to complete silence, background instantly turning to pitch black\", \"...\", \"stark high-contrast silhouette\", \"pure black background with white rim\", \"frozen instant after slash, zero sound, absolute stillness\"),\n",
+            "    (\"Decisive Slash Mark\", \"Single gold slash line ignites across the enemy Titan's chest as sword is sheathed\", \"It is done.\", \"extreme close-up sword sheath\", \"single thin gold slash line\", \"sheathing blade click as golden line ignites across boss torso\"),\n",
+            "    (\"Gold Dust Disintegration\", \"Enemy Titan dissolves into millions of brilliant golden light motes floating into sky\", \"Disintegrating...\", \"dissolving particle effect\", \"glowing golden dust particles\", \"boss shattering into sparkling golden light drifting into sky\"),\n",
+            "    (\"Triumphant Dawn\", \"Kaelen stands victorious on the ruined skyscraper edge watching the peaceful sunrise\", \"The dawn of a new era.\", \"panoramic golden sunrise\", \"glowing golden morning sun\", \"hero standing on edge of ruined skyscraper facing rising golden sun\"),\n",
+            "]\n",
+            "\n",
+            "def build_50_panel_story_config():\n",
+            "    panels = []\n",
+            "    for idx in range(50):\n",
+            "        p_id = idx + 1\n",
+            "        beat_name, scene_desc, dialogue_text, camera_type, color_pal, action_mechanics = DRAMATIC_50_BEATS[idx]\n",
+            "        \n",
+            "        panels.append({\n",
+            "            \"panel\": p_id,\n",
+            "            \"panel_id\": p_id,\n",
+            "            \"beat_name\": beat_name,\n",
+            "            \"emotion_beat\": beat_name,\n",
+            "            \"scene_description\": f\"{scene_desc}. Style: {AUTO_STORY_PROMPT}. Palette: {color_pal}.\",\n",
+            "            \"camera_angle\": camera_type,\n",
+            "            \"action_intensity\": 0.6 + (p_id % 5) * 0.08,\n",
+            "            \"characters\": [\n",
+            "                {\n",
+            "                    \"id\": AUTO_CHARACTER_NAME.lower().replace(\" \", \"_\"),\n",
+            "                    \"name\": AUTO_CHARACTER_NAME,\n",
+            "                    \"pose\": {\n",
+            "                        \"body\": f\"{action_mechanics} in {AUTO_STORY_WORLD}\",\n",
+            "                        \"head\": \"facing focal point\",\n",
+            "                        \"arms\": \"in dynamic kinetic posture\",\n",
+            "                        \"legs\": \"braced for action\"\n",
+            "                    },\n",
+            "                    \"expression\": {\n",
+            "                        \"emotion\": beat_name,\n",
+            "                        \"eyes\": \"intense focused gaze\",\n",
+            "                        \"mouth\": \"set in firm determination\"\n",
+            "                    },\n",
+            "                    \"dialogue\": {\n",
+            "                        \"text\": dialogue_text,\n",
+            "                        \"tone\": \"dramatic\",\n",
+            "                        \"bubble\": \"speech\"\n",
+            "                    }\n",
+            "                }\n",
+            "            ],\n",
+            "            \"actions\": [\n",
+            "                {\n",
+            "                    \"actor\": AUTO_CHARACTER_NAME.lower().replace(\" \", \"_\"),\n",
+            "                    \"verb\": beat_name,\n",
+            "                    \"target\": scene_desc,\n",
+            "                    \"mechanics\": action_mechanics,\n",
+            "                    \"impact\": f\"Extreme thriller beat #{p_id:02d}: {beat_name}\",\n",
+            "                    \"reaction\": f\"Environmental shift in {color_pal}\",\n",
+            "                    \"timing\": f\"Frame #{p_id:02d} freeze moment\"\n",
+            "                }\n",
+            "            ],\n",
+            "            \"environment\": {\n",
+            "                \"location\": AUTO_STORY_WORLD,\n",
+            "                \"time\": \"dynamic progression\",\n",
+            "                \"dominant_color_palette\": color_pal,\n",
+            "                \"light_source\": f\"dramatic {color_pal} illumination\"\n",
+            "            },\n",
+            "            \"camera\": f\"{camera_type}, dramatic perspective\"\n",
+            "        })\n",
+            "        \n",
+            "    return {\n",
+            "        \"title\": \"Cyberpunk_50_Panel_Saga\",\n",
+            "        \"character_name\": AUTO_CHARACTER_NAME,\n",
+            "        \"story_world\": AUTO_STORY_WORLD,\n",
+            "        \"panels\": panels,\n",
+            "        \"recurring_motif\": \"glowing kinetic energy aura\"\n",
+            "    }\n",
+            "\n",
+            "story_config = build_50_panel_story_config()\n",
+            "print(f\"[OK] Constructed 50-beat dramatic story configuration! ({len(story_config['panels'])} panels)\")\n"
+        ]
+    })
+
+    # Section 3 MD
+    cells.append({
+        "cell_type": "markdown",
+        "id": "sec3_md",
+        "metadata": {},
+        "source": [
+            "## ⚡ 3. MDCP Denoising & Panel Asset Generation\n",
+            "Executes the master MDCP generation loop across all 50 dramatic beats."
+        ]
+    })
+
+    # Section 3 Code
+    cells.append({
+        "cell_type": "code",
+        "execution_count": None,
+        "id": "sec3_code",
+        "metadata": {},
+        "outputs": [],
+        "source": [
+            "# ============================================================\n",
+            "# 3. Execute 50-Panel MDCP Pipeline Loop\n",
+            "# ============================================================\n",
+            "print(\"[Run] Executing MDCP Pipeline Run for 50 dramatic panels...\")\n",
+            "results = pipeline.run(\n",
+            "    prompt=AUTO_STORY_PROMPT,\n",
+            "    character_name=AUTO_CHARACTER_NAME,\n",
+            "    story_world=AUTO_STORY_WORLD,\n",
+            "    panel_count=50,\n",
+            "    _prebuilt_story=story_config,\n",
+            "    story_mode=\"literal\"\n",
+            ")\n",
+            "\n",
+            "generated_panels = results.get(\"panels\", [])\n",
+            "print(f\"[OK] Generated {len(generated_panels)} panel assets via MDCP framework!\")\n"
+        ]
+    })
+
+    # Section 4 MD
+    cells.append({
+        "cell_type": "markdown",
+        "id": "sec4_md",
+        "metadata": {},
+        "source": [
+            "## 📐 4. High-Density Single-Page Canvas Assembly & Text Overlay\n",
+            "Layouts all 50 generated panel images onto a master $2500 \\times 3750$ single-page comic canvas ($5 \\times 10$ grid) using `MangaFlowLayoutEngine`, and overlays speech bubbles and action text using `TextImageIntegrator`."
+        ]
+    })
+
+    # Section 4 Code
+    cells.append({
+        "cell_type": "code",
+        "execution_count": None,
+        "id": "sec4_code",
+        "metadata": {},
+        "outputs": [],
+        "source": [
+            "# ============================================================\n",
+            "# 4. MangaFlow High-Density Page Layout Assembly (2500x3750, 5x10 grid)\n",
+            "# ============================================================\n",
+            "layout_engine = MangaFlowLayoutEngine(\n",
+            "    page_width=2500,\n",
+            "    page_height=3750,\n",
+            "    gutter_width=16,\n",
+            "    margin=60,\n",
+            "    bg_color=\"white\"\n",
+            ")\n",
+            "pipeline.layout_engine = layout_engine\n",
+            "\n",
+            "print(\"[Layout] Assembling 50 panels onto single high-density comic page canvas...\")\n",
+            "single_page_image = layout_engine.layout_page(\n",
+            "    panels=generated_panels,\n",
+            "    page_num=1,\n",
+            "    text_integrator=pipeline.text_integrator\n",
+            ")\n",
+            "\n",
+            "page_output_path = os.path.join(output_dir, \"single_page_50_panels.png\")\n",
+            "single_page_image.save(page_output_path)\n",
+            "print(f\"[OK] Saved High-Res Single-Page Canvas (2500x3750) to: {page_output_path}\")\n",
+            "\n",
+            "# Also save standard display scale (1000x1500)\n",
+            "display_img = single_page_image.resize((1000, 1500), Image.Resampling.LANCZOS)\n",
+            "display_path = os.path.join(output_dir, \"single_page_50_panels_display.png\")\n",
+            "display_img.save(display_path)\n",
+            "print(f\"[OK] Saved Display Scale (1000x1500) to: {display_path}\")\n"
+        ]
+    })
+
+    # Section 5 MD
+    cells.append({
+        "cell_type": "markdown",
+        "id": "sec5_md",
+        "metadata": {},
+        "source": [
+            "## 📦 5. Multi-Format Comic Asset Export\n",
+            "Exports the assembled 50-panel comic into standard distribution formats: CBZ Archive, PDF Document, and Interactive HTML Web Comic Reader."
+        ]
+    })
+
+    # Section 5 Code
+    cells.append({
+        "cell_type": "code",
+        "execution_count": None,
+        "id": "sec5_code",
+        "metadata": {},
+        "outputs": [],
+        "source": [
+            "# ============================================================\n",
+            "# 5. Multi-Format Export (CBZ, PDF, Web HTML)\n",
+            "# ============================================================\n",
+            "exporter = ComicExporter(output_dir=output_dir)\n",
+            "page_record = [{\"page_num\": 1, \"page_image\": single_page_image, \"panels\": generated_panels}]\n",
+            "\n",
+            "cbz_file = exporter.export_cbz(page_record, title=\"50_Panel_Comic_Special\")\n",
+            "pdf_file = exporter.export_pdf(page_record, title=\"50_Panel_Comic_Special\")\n",
+            "html_file = os.path.join(output_dir, \"web_comic_50_panels.html\")\n",
+            "exporter.export_web_comic(page_record, html_file)\n",
+            "\n",
+            "print(\"=\" * 80)\n",
+            "print(\"SUMMARY OF EXPORTED 50-PANEL ASSETS:\")\n",
+            "print(f\" - High-Res Canvas (2500x3750): {page_output_path}\")\n",
+            "print(f\" - Display Scale (1000x1500):  {display_path}\")\n",
+            "print(f\" - CBZ Archive:               {cbz_file}\")\n",
+            "print(f\" - PDF Document:              {pdf_file}\")\n",
+            "print(f\" - Web Reader HTML:           {html_file}\")\n",
+            "print(\"=\" * 80)\n"
+        ]
+    })
+
+    # Section 6 MD
+    cells.append({
+        "cell_type": "markdown",
+        "id": "sec6_md",
+        "metadata": {},
+        "source": [
+            "## 👁️ 6. Inline Display & Visual Inspection\n",
+            "Displays the assembled 50-panel single-page comic image directly inside Jupyter."
+        ]
+    })
+
+    # Section 6 Code
+    cells.append({
+        "cell_type": "code",
+        "execution_count": None,
+        "id": "sec6_code",
+        "metadata": {},
+        "outputs": [],
+        "source": [
+            "# ============================================================\n",
+            "# 6. Inline Jupyter Visualization\n",
+            "# ============================================================\n",
+            "from IPython.display import display\n",
+            "\n",
+            "print(\"[Display] 50-Panel Single-Page Comic Layout:\")\n",
+            "display(display_img)\n"
+        ]
+    })
+
+    notebook_dict = {
+        "cells": cells,
+        "metadata": {
+            "kernelspec": {
+                "display_name": "Python 3",
+                "language": "python",
+                "name": "python3"
+            },
+            "language_info": {
+                "name": "python",
+                "version": "3.10.11"
+            }
+        },
+        "nbformat": 4,
+        "nbformat_minor": 5
+    }
+
+    # Write notebook to root directory and indie_comic_pipeline directory
+    paths = [
+        os.path.join("c:\\Users\\Dell\\Downloads\\drid", "Indie_Comic_pipeline.ipynb"),
+        os.path.join("c:\\Users\\Dell\\Downloads\\drid", "indie_comic_pipeline", "Indie_Comic_Pipeline.ipynb")
+    ]
+
+    for p in paths:
+        with open(p, "w", encoding="utf-8") as f:
+            json.dump(notebook_dict, f, indent=1)
+        print(f"Successfully wrote notebook: {p}")
+
+if __name__ == "__main__":
+    create_notebook()
